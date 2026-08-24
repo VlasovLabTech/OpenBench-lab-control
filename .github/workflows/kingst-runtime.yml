@@ -41,7 +41,7 @@ jobs:
           $manifest = Get-Content .openbench\tools\sigrok-modern\runtime-manifest.json -Raw | ConvertFrom-Json
           if (-not $manifest.files -or -not $manifest.libsigrok_commit) { throw "Invalid runtime manifest" }
           .openbench\tools\sigrok-modern\sigrok-cli.exe --version
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: openbench-sigrok-windows-x64
           path: .openbench/tools/sigrok-modern
