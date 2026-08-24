@@ -285,6 +285,7 @@ class PollingScheduler:
 
     async def _sample_target_unlocked(self, target: PollTarget) -> Measurement:
         loop = asyncio.get_running_loop()
+        connected = True
         try:
             result = await target.meter.read_meter(target.channel.id)
             if isinstance(result, MeterSample):
@@ -323,9 +324,15 @@ class PollingScheduler:
                 status="invalid",
             )
         except Exception:
+            connected = False
             self._mark_activity(target, connected=False)
             measurement = self._disconnected_measurement(target, loop.time())
         self._measurement_service.record(measurement)
+        # Persistence can be noticeably slower than the polling interval on a
+        # loaded Windows host. Refresh activity after the durable write so the
+        # watchdog cannot overwrite a just-completed recovery with stale state
+        # before subscribers receive the successful sample.
+        self._mark_activity(target, connected=connected)
         await self._event_bus.publish(measurement)
         return measurement
 

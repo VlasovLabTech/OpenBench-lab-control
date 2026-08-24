@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 
 from openbench.core.capabilities import MeterSample
 from openbench.core.events import MeasurementEventBus
 from openbench.core.scheduler import PollingScheduler
-from openbench.domain import Channel
+from openbench.domain import Channel, Measurement
 from openbench.services.measurement_service import MeasurementService
 from openbench.storage import Database
 
@@ -184,12 +185,23 @@ async def test_scheduler_keeps_invalid_for_malformed_data(
 @pytest.mark.asyncio
 async def test_watchdog_disconnects_stalled_meter_and_recovers(
     tmp_path: pytest.TempPathFactory,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     database = Database(f"sqlite:///{tmp_path / 'watchdog.db'}")
     database.create_schema()
     bus = MeasurementEventBus(queue_size=4)
+    measurement_service = MeasurementService(database)
+    record = measurement_service.record
+
+    def slow_record(measurement: Measurement) -> None:
+        # Reproduce a loaded Windows filesystem where the durable write takes
+        # longer than this test's intentionally tiny freshness window.
+        time.sleep(0.05)
+        record(measurement)
+
+    monkeypatch.setattr(measurement_service, "record", slow_record)
     scheduler = PollingScheduler(
-        MeasurementService(database),
+        measurement_service,
         bus,
         stale_grace_s=0.02,
         watchdog_interval_s=0.01,
