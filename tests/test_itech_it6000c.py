@@ -512,16 +512,19 @@ def test_api_and_dashboard_expose_safe_bidirectional_control(client: TestClient)
     assert cleared.status_code == 200
     assert cleared.json()["state"]["faults"] == []
 
+    base_path = f"/api/v1/bidirectional-power-supplies/{instrument.device_id}"
+    reserved = client.post(f"{base_path}/experiment-reservation")
+    assert reserved.status_code == 200
     transport.queries.clear()
     instrument._cached_at = 0
-    measured = client.get(
-        f"/api/v1/bidirectional-power-supplies/{instrument.device_id}/measurements"
-    )
+    measured = client.get(f"{base_path}/measurements")
     assert measured.status_code == 200
     assert measured.json()["measured_voltage_v"] == 0.03
     assert measured.json()["measured_current_a"] == -0.002
     assert measured.json()["measured_power_w"] == pytest.approx(-0.00006)
     assert transport.queries == ["MEAS:VOLT?", "MEAS:CURR?"]
+    released = client.delete(f"{base_path}/experiment-reservation")
+    assert released.status_code == 200
 
     page = client.get("/")
     assert page.status_code == 200

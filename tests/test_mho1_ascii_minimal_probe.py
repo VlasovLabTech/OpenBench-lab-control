@@ -109,7 +109,8 @@ def test_probe_sends_only_three_commands_and_reads_point_count_block(
     assert metadata["timing"]["total_transaction_s"] > 0
     assert metadata["timing"]["stop_to_ascii_data_sent_s"] > 0
     assert metadata["timing"]["ascii_connect_send_receive_s"] > 0
-    assert metadata["timing"]["ascii_data_sent_to_response_complete_s"] > 0
+    # An in-process fake may reply within one Windows monotonic-clock tick.
+    assert metadata["timing"]["ascii_data_sent_to_response_complete_s"] >= 0
     assert metadata["capture"]["declared_points"] == point_count
     assert metadata["capture"]["parsed_points"] == point_count
     assert metadata["artifacts"]["raw"]["sha256"]

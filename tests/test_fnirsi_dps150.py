@@ -317,6 +317,24 @@ def register_api_supply(
     return portal.call(_register_api_supply, client)
 
 
+def wait_for_program_completion(
+    client: TestClient,
+    base_path: str,
+    *,
+    timeout_s: float = 2.0,
+) -> dict[str, object]:
+    deadline = time.monotonic() + timeout_s
+    latest: dict[str, object] = {}
+    while time.monotonic() < deadline:
+        response = client.get(f"{base_path}/programs/status")
+        response.raise_for_status()
+        latest = response.json()
+        if latest["active"] is False:
+            return latest
+        time.sleep(0.02)
+    raise AssertionError(f"Power-supply program did not complete: {latest}")
+
+
 def test_power_supply_api_dashboard_capture_and_emergency_stop(
     client: TestClient,
 ) -> None:
@@ -461,11 +479,9 @@ def test_power_supply_program_lifecycle(client: TestClient) -> None:
         json={"steps": [{"voltage_v": 0.5, "current_a": 0.01, "dwell_s": 0.1}]},
     )
     assert natural.status_code == 200
-    time.sleep(0.25)
-    completed = client.get(f"{base}/programs/status")
-    assert completed.status_code == 200
-    assert completed.json()["active"] is False
-    assert completed.json()["progress_percent"] == pytest.approx(100)
+    completed = wait_for_program_completion(client, base)
+    assert completed["active"] is False
+    assert completed["progress_percent"] == pytest.approx(100)
     assert transport.output_enabled is False
 
 

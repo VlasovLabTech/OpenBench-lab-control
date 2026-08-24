@@ -152,7 +152,8 @@ def test_four_channel_probe_uses_exact_zero_delay_contract(tmp_path: Path) -> No
     assert metadata["preamble"]["y_calibration_source"] == "CH1"
     assert metadata["preamble"]["x_increment_s"] == pytest.approx(1.0e-9)
     assert metadata["preamble"]["x_origin_s"] == pytest.approx(-5.0e-7)
-    assert metadata["timing"]["preamble_data_sent_to_response_complete_s"] > 0
+    # In-process fake replies can complete within one Windows clock tick.
+    assert metadata["timing"]["preamble_data_sent_to_response_complete_s"] >= 0
     assert metadata["screenshot_error"] is None
     assert metadata["screenshot"]["format"] == "png"
     assert metadata["screenshot"]["attempt_count"] == 2
@@ -166,9 +167,9 @@ def test_four_channel_probe_uses_exact_zero_delay_contract(tmp_path: Path) -> No
     assert metadata["measurements"]["configured_slots"] == 10
     assert metadata["measurements"]["returned_values"] == 10
     assert metadata["measurements"]["available_values"] == 10
-    assert metadata["timing"]["screenshot_data_sent_to_response_complete_s"] > 0
-    assert metadata["timing"]["screenshot_phase_s"] > 0
-    assert metadata["timing"]["measurement_read_s"] > 0
+    assert metadata["timing"]["screenshot_data_sent_to_response_complete_s"] >= 0
+    assert metadata["timing"]["screenshot_phase_s"] >= 0
+    assert metadata["timing"]["measurement_read_s"] >= 0
     measurement_lines = (
         (outcome.session_directory / "measurements.csv").read_text(encoding="utf-8").splitlines()
     )
@@ -182,7 +183,7 @@ def test_four_channel_probe_uses_exact_zero_delay_contract(tmp_path: Path) -> No
         assert result["capture_error"] is None
         assert result["capture"]["declared_points"] == point_count
         assert result["capture"]["parsed_points"] == point_count
-        assert result["timing"]["ascii_data_sent_to_response_complete_s"] > 0
+        assert result["timing"]["ascii_data_sent_to_response_complete_s"] >= 0
         assert (outcome.session_directory / f"{source.lower()}.raw").exists()
         csv_lines = (
             (outcome.session_directory / f"{source.lower()}.csv")

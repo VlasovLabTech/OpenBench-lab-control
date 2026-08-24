@@ -597,7 +597,8 @@ async def test_captures_verified_ascii_frame_without_state_queries_or_measuremen
         (("CH1", "amplitude"), ("CH2", "frequency")),
     )
 
-    assert frame.elapsed_s > 0
+    # An in-process fake may finish within one Windows monotonic-clock tick.
+    assert frame.elapsed_s >= 0
     assert [item.source for item in frame.waveforms] == ["CH1", "CH2", "CH3", "CH4"]
     assert [item.points for item in frame.waveforms] == [4, 4, 4, 4]
     assert all(item.ascii_data for item in frame.waveforms)

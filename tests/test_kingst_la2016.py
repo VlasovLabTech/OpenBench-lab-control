@@ -401,7 +401,7 @@ def test_hardware_arm_and_delayed_start_are_available_through_api(
         json={
             "triggers": [],
             "auto_start_enabled": True,
-            "auto_start_delay_s": 0.05,
+            "auto_start_delay_s": 1.0,
         },
     )
     assert delayed.status_code == 200
@@ -412,9 +412,14 @@ def test_hardware_arm_and_delayed_start_are_available_through_api(
     assert recording.status_code == 201
     scheduled = wait_for_logic_state(client, analyzer.device_id, {"scheduled"})
     assert scheduled["scheduled_start_at"] is not None
-    assert scheduled["estimated_duration_s"] == pytest.approx(0.05)
+    assert scheduled["estimated_duration_s"] == pytest.approx(1.0)
     assert scheduled["remaining_s"] is not None
-    completed = wait_for_logic_state(client, analyzer.device_id, {"completed"})
+    completed = wait_for_logic_state(
+        client,
+        analyzer.device_id,
+        {"completed"},
+        timeout_s=4.0,
+    )
     assert completed["source"] == "global_recording"
     client.post("/api/v1/captures/recording/stop").raise_for_status()
 
