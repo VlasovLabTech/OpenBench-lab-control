@@ -28,7 +28,11 @@ jobs:
       - name: Mypy
         run: mypy src
       - name: Tests
-        run: pytest -q
+        id: tests
+        run: pytest -q --junitxml=pytest-results.xml
+      - name: Report test failures
+        if: failure() && steps.tests.outcome == 'failure'
+        run: python scripts/report-pytest-failures.py pytest-results.xml
 
   locked-windows-setup:
     runs-on: windows-latest
@@ -49,4 +53,10 @@ jobs:
         run: |
           .venv\Scripts\ruff.exe check .
           .venv\Scripts\mypy.exe src
-          .venv\Scripts\pytest.exe -q
+      - name: Tests in locked environment
+        id: locked_tests
+        shell: powershell
+        run: .venv\Scripts\pytest.exe -q --junitxml=pytest-results.xml
+      - name: Report locked-environment test failures
+        if: failure() && steps.locked_tests.outcome == 'failure'
+        run: .venv\Scripts\python.exe scripts/report-pytest-failures.py pytest-results.xml
