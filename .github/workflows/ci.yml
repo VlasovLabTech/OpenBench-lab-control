@@ -29,10 +29,12 @@ jobs:
         run: mypy src
       - name: Tests
         id: tests
-        run: pytest -q --junitxml=pytest-results.xml
+        run: python scripts/run-pytest-ci.py
       - name: Report test failures
         if: failure() && steps.tests.outcome == 'failure'
-        run: python scripts/report-pytest-failures.py pytest-results.xml
+        run: >-
+          python scripts/report-pytest-failures.py
+          .openbench/ci/pytest-results.xml .openbench/ci/pytest-output.log
 
   locked-windows-setup:
     runs-on: windows-latest
@@ -56,7 +58,9 @@ jobs:
       - name: Tests in locked environment
         id: locked_tests
         shell: powershell
-        run: .venv\Scripts\pytest.exe -q --junitxml=pytest-results.xml
+        run: .venv\Scripts\python.exe scripts/run-pytest-ci.py
       - name: Report locked-environment test failures
         if: failure() && steps.locked_tests.outcome == 'failure'
-        run: .venv\Scripts\python.exe scripts/report-pytest-failures.py pytest-results.xml
+        run: >-
+          .venv\Scripts\python.exe scripts/report-pytest-failures.py
+          .openbench/ci/pytest-results.xml .openbench/ci/pytest-output.log
