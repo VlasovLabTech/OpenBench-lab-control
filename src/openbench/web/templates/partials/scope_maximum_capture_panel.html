@@ -1,0 +1,87 @@
+{% set maximum = card.maximum_capture %}
+<section
+  class="scope-maximum-capture-panel"
+  id="scope-maximum-status-{{ card.device.id }}"
+  {% if maximum.active %}
+    hx-get="/ui/devices/{{ card.device.id }}/scope-maximum-capture/status"
+    hx-trigger="every 1s"
+    hx-swap="outerHTML"
+  {% endif %}
+>
+  <div class="scope-maximum-heading">
+    <div>
+      <strong>Full memory ASCII</strong>
+      <small>MAXIMUM · one capture only · current depth</small>
+    </div>
+    <span class="badge {{ 'good' if maximum.state == 'completed' else ('danger' if maximum.state == 'error' else 'muted') }}">
+      {{ maximum.state | replace("_", " ") | upper }}
+    </span>
+  </div>
+
+  {% if maximum_notice %}<small class="logic-inline-notice">{{ maximum_notice }}</small>{% endif %}
+  {% if maximum_error or maximum.error %}
+    <div class="scope-maximum-error">{{ maximum_error or maximum.error }}</div>
+  {% endif %}
+
+  {% if maximum.active %}
+    <div class="logic-progress scope-maximum-progress" aria-live="polite">
+      <div>
+        <strong>{{ maximum.message }}</strong>
+        <span>{{ "%.1f" | format(maximum.progress_percent) }}%</span>
+      </div>
+      {% if maximum.points_total %}
+        <progress max="{{ maximum.points_total }}" value="{{ maximum.points_completed }}"></progress>
+      {% else %}
+        <span class="logic-progress-indeterminate" aria-hidden="true"><i></i></span>
+      {% endif %}
+      <small>
+        {{ "{:,}".format(maximum.points_completed) }} / {{ "{:,}".format(maximum.points_total) }} points
+        {% if maximum.current_channel %}· {{ maximum.current_channel }}{% endif %}
+      </small>
+    </div>
+  {% else %}
+    {% if maximum.artifact_files %}
+      <div class="scope-maximum-files">
+        {% for path in maximum.artifact_files %}
+          <a href="/api/v1/oscilloscopes/{{ card.device.id }}/maximum-capture/files/{{ path.name }}">
+            {{ path.name }}
+          </a>
+        {% endfor %}
+        {% if maximum.metadata_file %}
+          <a href="/api/v1/oscilloscopes/{{ card.device.id }}/maximum-capture/files/{{ maximum.metadata_file.name }}">
+            capture.json
+          </a>
+        {% endif %}
+      </div>
+    {% endif %}
+    <form
+      class="scope-maximum-form"
+      method="post"
+      action="/ui/devices/{{ card.device.id }}/scope-maximum-capture/start"
+      hx-post="/ui/devices/{{ card.device.id }}/scope-maximum-capture/start"
+      hx-target="#dashboard-content"
+      hx-swap="innerHTML"
+      hx-disabled-elt="find button, find input"
+    >
+      <div class="scope-capture-channels">
+        {% for channel in scope_channels %}
+          <label>
+            <input
+              type="checkbox"
+              name="maximum_channel"
+              value="{{ channel }}"
+              {% if channel in card.scope_options.channels %}checked{% endif %}
+            >
+            <span>{{ channel }}</span>
+          </label>
+        {% endfor %}
+      </div>
+      <button class="primary" type="submit" {% if not card.connected %}disabled{% endif %}>
+        Capture MAX once
+      </button>
+    </form>
+    <small class="scope-maximum-note">
+      The oscilloscope must already be in STOP. OpenBench will not change memory depth or restart acquisition.
+    </small>
+  {% endif %}
+</section>

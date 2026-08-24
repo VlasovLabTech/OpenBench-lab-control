@@ -1,0 +1,155 @@
+{% set logic = card.logic_status %}
+{% set settings = card.logic_settings %}
+{% set error_message = logic_error or logic.error %}
+<section
+  class="logic-analyzer-panel"
+  id="logic-status-{{ card.device.id }}"
+  {% if logic.active %}
+    hx-get="/ui/devices/{{ card.device.id }}/logic-analyzer/status"
+    hx-trigger="every 1s"
+    hx-swap="outerHTML"
+  {% endif %}
+>
+  {% if logic_notice %}<small class="logic-inline-notice">{{ logic_notice }}</small>{% endif %}
+
+  <div class="logic-status-heading">
+    <span class="badge {{ 'good' if logic.state in ['ready', 'completed'] else ('danger' if logic.state == 'error' else 'muted') }}">
+      {{ logic.state | replace("_", " ") | upper }}
+    </span>
+    {% if error_message %}
+      <button
+        class="logic-error-button"
+        type="button"
+        popovertarget="logic-error-{{ card.device.id }}"
+      >Error details</button>
+    {% elif capture.active %}
+      <small>Linked to {{ capture.current_file.name }}</small>
+    {% elif logic.recording_file %}
+      <small>Linked to {{ logic.recording_file.name }}</small>
+    {% endif %}
+  </div>
+
+  {% if error_message %}
+    <div class="logic-error-popover" id="logic-error-{{ card.device.id }}" popover>
+      <header class="device-popover-header">
+        <div>
+          <strong>Logic capture failed</strong>
+          <small>{{ logic.capture_id or card.display_name }}</small>
+        </div>
+        <button
+          class="popover-close"
+          type="button"
+          popovertarget="logic-error-{{ card.device.id }}"
+          popovertargetaction="hide"
+          aria-label="Close error details"
+        >×</button>
+      </header>
+      <div class="logic-error-content">
+        <strong>{{ logic.message or "Capture failed" }}</strong>
+        <pre>{{ error_message }}</pre>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="logic-capture-summary">
+    <span><small>Channels</small><strong>{{ settings.channels | length }} / 16</strong></span>
+    <span>
+      <small>Sample rate</small>
+      <strong>
+        {% if settings.sample_rate_hz >= 1000000 %}
+          {{ "%g" | format(settings.sample_rate_hz / 1000000) }} MHz
+        {% else %}
+          {{ "%g" | format(settings.sample_rate_hz / 1000) }} kHz
+        {% endif %}
+      </strong>
+    </span>
+    <span><small>Samples</small><strong>{{ "{:,}".format(settings.sample_count) }}</strong></span>
+    <span><small>Window</small><strong>{{ "%.6g" | format(settings.duration_s) }} s</strong></span>
+  </div>
+
+  <div class="logic-capture-details">
+    <span>Threshold <strong>{{ "%g" | format(settings.threshold_v) }} V</strong></span>
+    <span>Trigger <strong>{{ settings.trigger_label }}</strong></span>
+    {% if settings.triggers %}
+      <span>Pre-trigger <strong>{{ settings.capture_ratio_percent }}%</strong></span>
+    {% endif %}
+    {% if settings.auto_start_enabled %}
+      <span>Auto <strong>RUN + {{ "%g" | format(settings.auto_start_delay_s) }} s</strong></span>
+    {% endif %}
+  </div>
+
+  {% if logic.active %}
+    <div class="logic-progress">
+      <div>
+        <strong>{{ logic.message }}</strong>
+        {% if logic.remaining_s is not none %}
+          <span class="logic-progress-time" data-logic-countdown data-remaining="{{ logic.remaining_s }}">
+            {% if logic.remaining_s > 0.05 %}
+              <strong>~{{ "%.0f" | format(logic.remaining_s) }} s</strong><small>left</small>
+            {% else %}
+              <strong>Finishing</strong>
+            {% endif %}
+          </span>
+        {% elif logic.state == "armed" %}
+          <span>waiting for signal</span>
+        {% else %}
+          <span>please wait</span>
+        {% endif %}
+      </div>
+      {% if logic.remaining_s is not none and logic.estimated_duration_s %}
+        <progress
+          max="{{ logic.estimated_duration_s }}"
+          value="{{ logic.estimated_duration_s - logic.remaining_s }}"
+        ></progress>
+      {% else %}
+        <span class="logic-progress-indeterminate" aria-hidden="true"><i></i></span>
+      {% endif %}
+    </div>
+  {% elif logic.capture_id and not error_message %}
+    <div class="logic-last-capture">
+      <span>{{ logic.message }}</span>
+      {% if logic.artifact_file %}
+        <a
+          href="/api/v1/logic-analyzers/{{ card.device.id }}/captures/{{ logic.capture_id }}/files/{{ logic.artifact_file.name }}"
+        >{{ logic.artifact_file.name }}</a>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <div class="logic-actions">
+    {% if logic.active %}
+      <form
+        hx-post="/ui/devices/{{ card.device.id }}/logic-analyzer/stop"
+        hx-target="#logic-status-{{ card.device.id }}"
+        hx-swap="outerHTML"
+      ><button class="disconnect-button" type="submit">Stop</button></form>
+    {% else %}
+      <form
+        hx-post="/ui/devices/{{ card.device.id }}/logic-analyzer/start"
+        hx-target="#logic-status-{{ card.device.id }}"
+        hx-swap="outerHTML"
+      ><button class="primary" type="submit">Start</button></form>
+      <form
+        hx-post="/ui/devices/{{ card.device.id }}/logic-analyzer/arm"
+        hx-target="#logic-status-{{ card.device.id }}"
+        hx-swap="outerHTML"
+      >
+        <button class="secondary" type="submit" {% if not settings.triggers %}disabled{% endif %}>
+          Arm
+        </button>
+      </form>
+    {% endif %}
+    <form
+      hx-post="/ui/devices/{{ card.device.id }}/logic-analyzer/open-folder"
+      hx-target="#logic-status-{{ card.device.id }}"
+      hx-swap="outerHTML"
+    >
+      <button class="folder-button logic-folder-button" type="submit"
+              aria-label="Open logic capture folder" title="Open logic capture folder">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 5.5h7l2 2H21v11H3z"/>
+        </svg>
+      </button>
+    </form>
+  </div>
+</section>

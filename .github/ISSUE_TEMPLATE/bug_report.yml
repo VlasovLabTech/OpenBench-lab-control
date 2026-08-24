@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a reproducible OpenBench problem
+title: "[Bug]: "
+labels: []
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve OpenBench. Remove credentials, serial numbers,
+        private IP addresses, operator comments, and sensitive captures or logs.
+        Report vulnerabilities privately as described in SECURITY.md.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I removed private laboratory and personal data from this report.
+          required: true
+        - label: Reproducing this issue does not require energizing unsafe or unknown wiring.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: OpenBench version or commit
+      placeholder: v0.1.0 or a commit hash
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system and Python version
+      placeholder: Windows 11, Python 3.13
+    validations:
+      required: true
+  - type: input
+    id: instrument
+    attributes:
+      label: Instrument
+      description: Model, transport, and firmware if relevant; never include a serial number
+      placeholder: Micsig MHO14-200, LAN, firmware 2.x
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and its impact.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Safe reproduction steps
+      description: Provide the smallest safe sequence that reproduces the issue.
+      placeholder: |
+        1. Start OpenBench with ...
+        2. Open ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Paste only the relevant, reviewed output from the diagnostic script or tests.
+      render: shell

@@ -1,0 +1,112 @@
+{% if notice %}
+  <div class="notice good-notice">{{ notice }}</div>
+{% endif %}
+{% if errors %}
+  <div class="notice error-notice">
+    <strong>Cannot complete the operation</strong>
+    <ul>{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul>
+  </div>
+{% endif %}
+
+<section class="matrix-status">
+  <div><span>Active profile</span><strong>{{ active.profile_name or "ALL ROUTES OPEN" }}</strong></div>
+  <div><span>Active routes</span><strong>{{ active.active_connections | length }}</strong></div>
+  <form hx-post="/ui/matrix/open-all" hx-target="#matrix-panel" hx-swap="innerHTML">
+    <button class="danger-outline" type="submit">Open all routes</button>
+  </form>
+</section>
+
+<section class="matrix-layout">
+  <aside class="card profile-list">
+    <header><p class="eyebrow">SAVED PROFILES</p><span>{{ profiles | length }}</span></header>
+    {% for profile in profiles %}
+      <button
+        class="profile-item {% if selected and selected.id == profile.id %}selected{% endif %}"
+        hx-get="/ui/matrix/panel?profile_id={{ profile.id }}"
+        hx-target="#matrix-panel"
+        hx-swap="innerHTML"
+        type="button">
+        <span>{{ profile.name }}</span>
+        <small>v{{ profile.version }} · {{ profile.connections | length }} routes</small>
+      </button>
+    {% endfor %}
+  </aside>
+
+  <div class="matrix-main">
+    {% if selected %}
+    <article class="card">
+      <header class="profile-header">
+        <div>
+          <p class="eyebrow">PROFILE v{{ selected.version }}</p>
+          <h2>{{ selected.name }}</h2>
+        </div>
+        {% if active.profile_id == selected.id %}<span class="badge good">ACTIVE</span>{% endif %}
+      </header>
+      <div class="connection-list">
+        {% for connection in selected.connections %}
+          <div class="connection-row">
+            <span class="port-pill">{{ connection.from_port }}</span>
+            <span class="route-arrow">→</span>
+            <span class="port-pill">{{ connection.to_port }}</span>
+          </div>
+        {% else %}
+          <p class="empty">No connections yet.</p>
+        {% endfor %}
+      </div>
+      <div class="button-row">
+        <form hx-post="/ui/matrix/profiles/{{ selected.id }}/validate" hx-target="#matrix-panel" hx-swap="innerHTML">
+          <button class="secondary" type="submit">Validate</button>
+        </form>
+        <form hx-post="/ui/matrix/profiles/{{ selected.id }}/apply" hx-target="#matrix-panel" hx-swap="innerHTML">
+          <button class="primary" type="submit">Apply profile</button>
+        </form>
+      </div>
+    </article>
+
+    <article class="card">
+      <p class="eyebrow">ADD CONNECTION</p>
+      <form class="inline-form" hx-post="/ui/matrix/profiles/{{ selected.id }}/connections" hx-target="#matrix-panel" hx-swap="innerHTML">
+        <label>From
+          <select name="from_port" required>
+            {% for port in ports %}<option value="{{ port.id }}">{{ port.id }} · {{ port.type }}</option>{% endfor %}
+          </select>
+        </label>
+        <span class="route-arrow">→</span>
+        <label>To
+          <select name="to_port" required>
+            {% for port in ports %}<option value="{{ port.id }}">{{ port.id }} · {{ port.type }}</option>{% endfor %}
+          </select>
+        </label>
+        <button class="secondary" type="submit">Add</button>
+      </form>
+    </article>
+    {% endif %}
+
+    <article class="card">
+      <p class="eyebrow">NEW PROFILE</p>
+      <form class="new-profile-form" hx-post="/ui/matrix/profiles" hx-target="#matrix-panel" hx-swap="innerHTML">
+        <label>Profile name<input name="name" maxlength="200" placeholder="Startup capture" required></label>
+        <label>Initial route from
+          <select name="from_port">
+            <option value="">No initial route</option>
+            {% for port in ports %}<option value="{{ port.id }}">{{ port.id }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Initial route to
+          <select name="to_port">
+            <option value="">No initial route</option>
+            {% for port in ports %}<option value="{{ port.id }}">{{ port.id }}</option>{% endfor %}
+          </select>
+        </label>
+        <button class="primary" type="submit">Create profile</button>
+      </form>
+    </article>
+  </div>
+
+  <aside class="card ports-list">
+    <header><p class="eyebrow">AVAILABLE PORTS</p><span>{{ ports | length }}</span></header>
+    {% for port in ports %}
+      <div class="port-row"><span>{{ port.id }}</span><small>{{ port.type }}</small></div>
+    {% endfor %}
+  </aside>
+</section>

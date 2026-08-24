@@ -1,0 +1,113 @@
+{% set state = card.bidirectional_state %}
+{% set profile = card.bidirectional_instrument.profile if card.bidirectional_instrument else none %}
+{% set warnings = card.bidirectional_warnings %}
+<div class="itech-settings">
+  {% if state and profile %}
+    {% if warnings %}
+      <div class="itech-warning-summary">
+        <strong>Safety review</strong>
+        {% for field, items in warnings.items() %}
+          {% for warning in items %}<span>{{ warning.message }}</span>{% endfor %}
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <form class="itech-settings-form" method="post"
+          action="/ui/devices/{{ card.device.id }}/bidirectional/operating-point"
+          hx-post="/ui/devices/{{ card.device.id }}/bidirectional/operating-point"
+          hx-target="#dashboard-content" hx-swap="innerHTML" hx-disabled-elt="find button">
+      <header><strong>Operating point</strong><small>Fixed CV / CC · hardware read-back</small></header>
+      <label>Priority
+        <select name="priority"><option value="CV" {% if state.priority == 'CV' %}selected{% endif %}>CV — constant voltage</option><option value="CC" {% if state.priority == 'CC' %}selected{% endif %}>CC — constant current</option></select>
+      </label>
+      <label class="{{ 'itech-field-danger' if 'output_enabled' in warnings else '' }}">Output
+        <select name="output_enabled"><option value="false" {% if not state.output_enabled %}selected{% endif %}>OFF</option><option value="true" {% if state.output_enabled %}selected{% endif %}>ON</option></select>
+      </label>
+      <label class="{{ 'itech-field-danger' if 'voltage_setpoint_v' in warnings else '' }}">Voltage setpoint, V
+        <input type="number" name="voltage_setpoint_v" min="0" max="{{ profile.rated_voltage_v }}" step="0.01" required value="{{ '%.2f' | format(state.voltage_setpoint_v) }}">
+      </label>
+      <label class="{{ 'itech-field-danger' if 'current_setpoint_a' in warnings else '' }}">Current setpoint, A
+        <input type="number" name="current_setpoint_a" min="-{{ profile.rated_current_a }}" max="{{ profile.rated_current_a }}" step="0.01" required value="{{ '%.2f' | format(state.current_setpoint_a) }}">
+      </label>
+      <label class="{{ 'itech-field-danger' if 'current_limit_positive_a' in warnings else '' }}">Positive current limit, A
+        <input type="number" name="current_limit_positive_a" min="0" max="{{ profile.scpi_current_max_a }}" step="0.01" required value="{{ '%.2f' | format(state.current_limit_positive_a) }}">
+      </label>
+      <label class="{{ 'itech-field-danger' if 'current_limit_negative_a' in warnings else '' }}">Negative current limit, A
+        <input type="number" name="current_limit_negative_a" min="-{{ profile.scpi_current_max_a }}" max="0" step="0.01" required value="{{ '%.2f' | format(state.current_limit_negative_a) }}">
+      </label>
+      <label class="{{ 'itech-field-danger' if 'voltage_limit_positive_v' in warnings else '' }}">Positive voltage limit, V
+        <input type="number" name="voltage_limit_positive_v" min="0" max="{{ profile.scpi_voltage_max_v }}" step="0.01" required value="{{ '%.2f' | format(state.voltage_limit_positive_v) }}">
+      </label>
+      <label>Negative voltage limit, V
+        <input type="number" name="voltage_limit_negative_v" min="0" max="0.2" step="0.01" required value="{{ '%.2f' | format(state.voltage_limit_negative_v) }}">
+      </label>
+      <label class="{{ 'itech-field-danger' if 'power_limit_positive_w' in warnings else '' }}">Positive power limit, W
+        <input type="number" name="power_limit_positive_w" min="0" max="{{ profile.scpi_power_max_w }}" step="1" required value="{{ '%.0f' | format(state.power_limit_positive_w) }}">
+      </label>
+      <label class="{{ 'itech-field-danger' if 'power_limit_negative_w' in warnings else '' }}">Negative power limit, W
+        <input type="number" name="power_limit_negative_w" min="-{{ profile.scpi_power_max_w }}" max="-1" step="1" required value="{{ '%.0f' | format(state.power_limit_negative_w) }}">
+      </label>
+      <label class="itech-wiring-confirmation"><input type="checkbox" name="wiring_confirmed" value="true">Wiring and load checked — required to enable Output</label>
+      <button class="generator-apply" type="submit">Apply & verify</button>
+    </form>
+
+    <form class="itech-settings-form itech-protection-form" method="post"
+          action="/ui/devices/{{ card.device.id }}/bidirectional/protections"
+          hx-post="/ui/devices/{{ card.device.id }}/bidirectional/protections"
+          hx-target="#dashboard-content" hx-swap="innerHTML" hx-disabled-elt="find button">
+      <header><strong>Protections</strong><small>Output must be OFF</small></header>
+      {% for code, enabled, level, delay, unit, min_value, max_value in [
+        ('ovp', state.ovp_enabled, state.ovp_level_v, state.ovp_delay_s, 'V', 0, profile.scpi_voltage_max_v),
+        ('ocp', state.ocp_enabled, state.ocp_level_a, state.ocp_delay_s, 'A', -profile.scpi_current_max_a, profile.scpi_current_max_a),
+        ('opp', state.opp_enabled, state.opp_level_w, state.opp_delay_s, 'W', -profile.scpi_power_max_w, profile.scpi_power_max_w)
+      ] %}
+        <div class="itech-protection-row {{ 'itech-field-danger' if (code + '_enabled') in warnings or (code + '_level_' + unit.lower()) in warnings else '' }}">
+          <strong>{{ code | upper }}</strong>
+          <select name="{{ code }}_enabled"><option value="true" {% if enabled %}selected{% endif %}>ON</option><option value="false" {% if not enabled %}selected{% endif %}>OFF</option></select>
+          <input type="number" name="{{ code }}_level_{{ unit.lower() }}" min="{{ min_value }}" max="{{ max_value }}" step="{{ 1 if unit == 'W' else 0.01 }}" required value="{{ '%.0f' | format(level) if unit == 'W' else '%.2f' | format(level) }}" aria-label="{{ code | upper }} level">
+          <input type="number" name="{{ code }}_delay_s" min="0" max="60" step="0.001" required value="{{ delay }}" aria-label="{{ code | upper }} delay">
+          <em>{{ unit }} · delay s</em>
+        </div>
+      {% endfor %}
+      {% for code, enabled, level, delay, warmup, unit, min_value, max_value in [
+        ('uvp', state.uvp_enabled, state.uvp_level_v, state.uvp_delay_s, state.uvp_warmup_s, 'V', 0, profile.scpi_voltage_max_v),
+        ('ucp', state.ucp_enabled, state.ucp_level_a, state.ucp_delay_s, state.ucp_warmup_s, 'A', -profile.scpi_current_max_a, profile.scpi_current_max_a)
+      ] %}
+        <div class="itech-protection-row {{ 'itech-field-danger' if (code + '_enabled') in warnings else '' }}">
+          <strong>{{ code | upper }}</strong>
+          <select name="{{ code }}_enabled"><option value="true" {% if enabled %}selected{% endif %}>ON</option><option value="false" {% if not enabled %}selected{% endif %}>OFF</option></select>
+          <input type="number" name="{{ code }}_level_{{ unit.lower() }}" min="{{ min_value }}" max="{{ max_value }}" step="0.01" required value="{{ '%.2f' | format(level) }}" aria-label="{{ code | upper }} level">
+          <input type="number" name="{{ code }}_delay_s" min="0" max="60" step="0.001" required value="{{ delay }}" aria-label="{{ code | upper }} delay">
+          <input type="number" name="{{ code }}_warmup_s" min="0" max="60" step="0.001" required value="{{ warmup }}" aria-label="{{ code | upper }} warm-up">
+          <em>{{ unit }} · delay · warm-up</em>
+        </div>
+      {% endfor %}
+      <button class="generator-apply" type="submit">Apply protections & verify</button>
+    </form>
+
+    <form class="itech-settings-form itech-advanced-form" method="post"
+          action="/ui/devices/{{ card.device.id }}/bidirectional/advanced"
+          hx-post="/ui/devices/{{ card.device.id }}/bidirectional/advanced"
+          hx-target="#dashboard-content" hx-swap="innerHTML" hx-disabled-elt="find button">
+      <header><strong>Advanced fixed-mode settings</strong><small>Output must be OFF</small></header>
+      <label>Voltage slew +, V/ms<input type="number" name="voltage_slew_positive_v_per_ms" min="0.001" max="2000" step="0.001" required value="{{ state.voltage_slew_positive_v_per_ms }}"></label>
+      <label>Voltage slew −, V/ms<input type="number" name="voltage_slew_negative_v_per_ms" min="0.001" max="2000" step="0.001" required value="{{ state.voltage_slew_negative_v_per_ms }}"></label>
+      <label>Current slew +, A/ms<input type="number" name="current_slew_positive_a_per_ms" min="0.001" max="2000" step="0.001" required value="{{ state.current_slew_positive_a_per_ms }}"></label>
+      <label>Current slew −, A/ms<input type="number" name="current_slew_negative_a_per_ms" min="0.001" max="2000" step="0.001" required value="{{ state.current_slew_negative_a_per_ms }}"></label>
+      <label>Output rise delay, s<input type="number" name="output_rise_delay_s" min="0" max="60" step="0.001" required value="{{ state.output_rise_delay_s }}"></label>
+      <label>Output fall delay, s<input type="number" name="output_fall_delay_s" min="0" max="60" step="0.001" required value="{{ state.output_fall_delay_s }}"></label>
+      <label>Watchdog<select name="watchdog_enabled"><option value="true" {% if state.watchdog_enabled %}selected{% endif %}>ON</option><option value="false" {% if not state.watchdog_enabled %}selected{% endif %}>OFF</option></select></label>
+      <label>Watchdog delay, s<input type="number" name="watchdog_delay_s" min="1" max="6000" step="1" required value="{{ state.watchdog_delay_s }}"></label>
+      <button class="generator-apply" type="submit">Apply advanced & verify</button>
+    </form>
+
+    <div class="itech-readback">
+      <span><small>Identity</small><strong>{{ card.bidirectional_instrument.identity.model }}</strong><em>SN {{ card.bidirectional_instrument.identity.serial_number }}</em></span>
+      <span><small>Firmware</small><strong>{{ card.bidirectional_instrument.identity.main_firmware }}</strong><em>{{ card.bidirectional_instrument.identity.controller_1_firmware }} · {{ card.bidirectional_instrument.identity.controller_2_firmware }}</em></span>
+      <span><small>Transport</small><strong>{{ card.bidirectional_instrument.descriptor.port }}</strong><em>{{ card.bidirectional_instrument.descriptor.baud_rate }} baud</em></span>
+      <span><small>Status registers</small><strong>Q {{ state.questionable_status }} · O {{ state.operation_status }}</strong><em>RZero {{ 'ON' if state.voltage_rzero_enabled else 'OFF' }} · Sink R {{ 'ON' if state.sink_resistance_enabled else 'OFF' }}</em></span>
+    </div>
+  {% else %}
+    <div class="channel-empty">Waiting for complete IT6054C read-back…</div>
+  {% endif %}
+</div>

@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        python: ["3.11", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[hardware,dev]"
+      - name: Ruff
+        run: ruff check .
+      - name: Mypy
+        run: mypy src
+      - name: Tests
+        run: pytest -q
+
+  locked-windows-setup:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Reproduce locked environment
+        shell: powershell
+        run: scripts\setup-openbench.ps1 -Dev
+      - name: Diagnose
+        shell: powershell
+        run: scripts\diagnose-openbench.ps1
+      - name: Test locked environment
+        shell: powershell
+        run: |
+          .venv\Scripts\ruff.exe check .
+          .venv\Scripts\mypy.exe src
+          .venv\Scripts\pytest.exe -q

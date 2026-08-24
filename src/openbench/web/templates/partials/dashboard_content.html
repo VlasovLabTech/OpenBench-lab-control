@@ -1,0 +1,1297 @@
+{% if notice %}
+  <div class="notice toast good-notice" role="status">{{ notice }}</div>
+{% endif %}
+{% if errors %}
+  <div class="notice toast error-notice" role="alert">
+    {% for error in errors %}<div>{{ error }}</div>{% endfor %}
+  </div>
+{% endif %}
+
+<section class="status-strip">
+  <div title="OpenBench safety state. INTERLOCKED means outputs are blocked.">
+    <span>System</span>
+    <strong class="{{ 'status-good' if system_operational else 'status-danger' }}">
+      {{ system_status }}
+    </strong>
+  </div>
+  <div class="status-instrument-cell">
+    <span>Instruments</span>
+    <button class="status-device-trigger" type="button"
+            popovertarget="devices-popover"
+            aria-label="Open instruments: {{ connected_count }} connected of {{ known_count }} added"
+            title="Connected / added instruments">
+      <strong data-role="instrument-count">{{ connected_count }} / {{ known_count }}</strong>
+      <i aria-hidden="true"></i>
+    </button>
+  </div>
+  <div>
+    <span>CSV recording</span>
+    <strong class="{{ 'status-danger' if capture.active else '' }}">
+      {{ "RECORDING" if capture.active else "STOPPED" }}
+    </strong>
+  </div>
+  <div>
+    <span>Electrical matrix</span>
+    <strong>{{ active.profile_name or "ALL OPEN" }}</strong>
+  </div>
+  <div title="Live link between this browser and the OpenBench measurement stream.">
+    <span>Data connection</span>
+    <strong class="status-good" data-role="live-status">LIVE</strong>
+  </div>
+</section>
+
+<div class="device-popover" id="devices-popover" popover>
+  <header class="device-popover-header">
+    <div>
+      <strong>Devices</strong>
+      <small data-role="connected-summary">
+        {{ connected_count }} OF {{ known_count }} CONNECTED
+      </small>
+    </div>
+    <button class="popover-close" type="button" popovertarget="devices-popover"
+            popovertargetaction="hide" aria-label="Close devices">×</button>
+  </header>
+  <div class="discovery-panel">
+    <div class="discovery-all">
+      <span>Scan every supported transport</span>
+      <form
+        method="post"
+        action="/ui/devices/discover/all"
+        hx-post="/ui/devices/discover/all"
+        hx-target="#dashboard-content"
+        hx-swap="innerHTML"
+        hx-disabled-elt="find button"
+      >
+        <button class="primary" type="submit">Find all</button>
+      </form>
+    </div>
+    <div class="discovery-progress" data-discovery-progress hidden aria-live="polite">
+      <div>
+        <strong data-discovery-label>Searching devices…</strong>
+        <span data-discovery-elapsed>0 s elapsed</span>
+      </div>
+      <span class="discovery-progress-track" aria-hidden="true"><i></i></span>
+    </div>
+    <div class="discovery-list">
+      {% for target in discovery_targets %}
+        <div class="discovery-row">
+          <div>
+            <strong>{{ target.name }}</strong>
+            <small>{{ target.transport }} · {{ target.description }}</small>
+          </div>
+          <form
+            method="post"
+            action="/ui/devices/discover/{{ target.id }}"
+            hx-post="/ui/devices/discover/{{ target.id }}"
+            hx-target="#dashboard-content"
+            hx-swap="innerHTML"
+            hx-disabled-elt="find button"
+          >
+            <button class="secondary" type="submit"
+                    {% if not target.enabled %}disabled{% endif %}>
+              {{ "Find again" if target.connected else "Find" }}
+            </button>
+          </form>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<article class="card capture-bar{% if capture.active %} is-recording{% endif %}">
+  {% if capture.active and capture.started_at %}
+    <div class="capture-recording-summary">
+      <span class="recording-dot" aria-hidden="true"></span>
+      <strong
+        data-recording-timer
+        data-started-at="{{ capture.started_at.isoformat() }}"
+        data-duration="{{ capture.duration_s or 0 }}"
+      >
+        {{ "%.0f" | format(capture.elapsed_s) }} seconds
+      </strong>
+      <span>{{ capture.current_title or "Recording" }}</span>
+      <small>{{ capture.samples_written }} samples</small>
+    </div>
+    <form
+      method="post"
+      action="/ui/captures/recording/stop"
+      hx-post="/ui/captures/recording/stop"
+      hx-target="#dashboard-content"
+      hx-swap="innerHTML"
+      hx-disabled-elt="find button"
+    >
+      <button class="record-stop capture-run-button" type="submit">STOP</button>
+    </form>
+  {% else %}
+    <div class="capture-inline-fields" id="capture-fields">
+      <input
+        id="capture-title"
+        name="title"
+        maxlength="120"
+        value="{{ capture.draft_title }}"
+        placeholder="Title"
+        aria-label="Capture title"
+        data-capture-draft="capture-title"
+      >
+      <textarea
+        id="capture-comment"
+        name="comment"
+        maxlength="10000"
+        rows="1"
+        placeholder="Comment"
+        aria-label="Capture comment"
+        data-capture-draft="capture-comment"
+        data-auto-grow
+      >{{ capture.draft_comment }}</textarea>
+      <select name="capture_mode" aria-label="Capture mode or recording duration">
+        <option value="once">Once</option>
+        <option value="0">Until stopped</option>
+        <option value="10">10 seconds</option>
+        <option value="30">30 seconds</option>
+        <option value="60">1 minute</option>
+        <option value="300">5 minutes</option>
+        <option value="600">10 minutes</option>
+        <option value="1800">30 minutes</option>
+        <option value="3600">1 hour</option>
+      </select>
+    </div>
+    <form
+      method="post"
+      action="/ui/captures/run"
+      hx-post="/ui/captures/run"
+      hx-include="#capture-fields"
+      hx-target="#dashboard-content"
+      hx-swap="innerHTML"
+      hx-disabled-elt="find button"
+    >
+      <button class="record-start capture-run-button" type="submit">RUN</button>
+    </form>
+  {% endif %}
+
+  <form
+    class="capture-folder-form"
+    method="post"
+    action="/ui/captures/open-folder"
+    hx-post="/ui/captures/open-folder"
+    hx-target="#dashboard-content"
+    hx-swap="innerHTML"
+  >
+    <button class="folder-button" type="submit" aria-label="Open saved folder"
+            title="Open saved folder">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 5.5h7l2 2H21v11H3z"/>
+      </svg>
+    </button>
+  </form>
+</article>
+
+<div class="section-heading compact-heading">
+  <h2>Instruments</h2>
+</div>
+
+<section class="instrument-grid">
+  {% for card in device_cards %}
+    {% set maximum = card.maximum_capture %}
+    <article
+      class="card instrument-card{% if maximum and maximum.active %} is-maximum-capture-active{% endif %}{% if not card.connected %} is-disconnected{% endif %}"
+      data-device-card
+      data-device-id="{{ card.device.id }}"
+      data-connected="{{ 'true' if card.connected else 'false' }}"
+      data-maximum-capture-active="{{ 'true' if maximum and maximum.active else 'false' }}"
+    >
+      <header>
+        <div>
+          <h2>{{ card.display_name }}</h2>
+          <p class="device-type">{{ card.device_type }}</p>
+          <p
+            class="instrument-context-preview"
+            data-role="instrument-context-preview"
+            title="{{ card.instrument_context }}"
+            {% if not card.instrument_context %}hidden{% endif %}
+          >{{ card.context_preview }}</p>
+        </div>
+        <div class="instrument-actions">
+          <span
+            class="badge {% if card.connected %}good{% else %}danger{% endif %}"
+            data-role="device-status"
+          >
+            {% if maximum and maximum.active %}MAX ASCII{% elif card.connected %}CONNECTED{% else %}DISCONNECTED{% endif %}
+          </span>
+          <button
+            class="instrument-settings-button"
+            type="button"
+            popovertarget="instrument-settings-{{ card.device.id }}"
+            {% if maximum and maximum.active %}disabled{% endif %}
+          >
+            Settings
+          </button>
+          <form
+            method="post"
+            action="/ui/devices/{{ card.device.id }}/disconnect"
+            hx-post="/ui/devices/{{ card.device.id }}/disconnect"
+            hx-target="#dashboard-content"
+            hx-swap="innerHTML"
+          >
+            <button class="disconnect-button" type="submit"
+                    {% if maximum and maximum.active %}disabled{% endif %}>Disconnect</button>
+          </form>
+        </div>
+      </header>
+
+      {% if card.bidirectional_power_supply %}
+        {% include "partials/bidirectional_power_supply_panel.html" %}
+      {% elif card.generator %}
+        <section class="generator-panel">
+          <div class="generator-active-summary">
+            <span
+              class="badge {{ 'good' if card.generator_active_label != 'OUTPUTS OFF' else 'muted' }}"
+              data-generator-active-summary
+            >{{ card.generator_active_label }}</span>
+            <small>Click a channel state to switch its output.</small>
+          </div>
+          {% for output in card.generator_outputs %}
+            {% set waveform = output.parameters.waveform %}
+            {% set frequency = output.parameters.frequency %}
+            {% set output_state = output.parameters.output %}
+            <div class="generator-output">
+              <div class="generator-output-heading">
+                <strong>{{ output.label }}</strong>
+                <form
+                  class="generator-output-toggle"
+                  method="post"
+                  action="/ui/devices/{{ card.device.id }}/generator/channels/{{ output.number }}/output"
+                  hx-post="/ui/devices/{{ card.device.id }}/generator/channels/{{ output.number }}/output"
+                  hx-target="#dashboard-content"
+                  hx-swap="innerHTML"
+                  hx-disabled-elt="find button"
+                >
+                  <input
+                    type="hidden"
+                    name="enabled"
+                    value="{{ 'false' if output_state.latest and output_state.latest.quality == 'ON' else 'true' }}"
+                  >
+                  <button
+                    type="submit"
+                    class="badge generator-output-button {{ 'good' if output_state.latest and output_state.latest.quality == 'ON' else 'muted' }}"
+                    data-channel-id="{{ output_state.channel.id }}"
+                    data-last-sample-at="{{ output_state.latest.timestamp_utc.isoformat() if output_state.latest else '' }}"
+                    data-last-status="{{ output_state.latest.status if output_state.latest else 'waiting' }}"
+                    data-freshness-timeout="{{ output_state.freshness_timeout_s }}"
+                    data-generator-output-state
+                    data-role="mode"
+                    title="Toggle {{ output.label }} output"
+                  >{{ output_state.latest.quality if output_state.latest else "WAITING" }}</button>
+                </form>
+              </div>
+              <div class="generator-output-primary">
+                <span
+                  data-channel-id="{{ waveform.channel.id }}"
+                  data-last-sample-at="{{ waveform.latest.timestamp_utc.isoformat() if waveform.latest else '' }}"
+                  data-last-status="{{ waveform.latest.status if waveform.latest else 'waiting' }}"
+                  data-freshness-timeout="{{ waveform.freshness_timeout_s }}"
+                >
+                  <small>Waveform</small>
+                  <strong data-role="mode">{{ waveform.latest.quality if waveform.latest else "waiting" }}</strong>
+                </span>
+                <span
+                  data-channel-id="{{ frequency.channel.id }}"
+                  data-last-sample-at="{{ frequency.latest.timestamp_utc.isoformat() if frequency.latest else '' }}"
+                  data-last-status="{{ frequency.latest.status if frequency.latest else 'waiting' }}"
+                  data-freshness-timeout="{{ frequency.freshness_timeout_s }}"
+                >
+                  <small>Frequency</small>
+                  <strong data-role="value">
+                    {{ "%.6g" | format(frequency.latest.value) if frequency.latest and frequency.latest.value is not none else "вЂ”" }}
+                  </strong>
+                  <em data-role="unit">{{ frequency.latest.unit if frequency.latest else "Hz" }}</em>
+                </span>
+              </div>
+              <div class="generator-parameters">
+                {% for key, label in [
+                  ("amplitude", "Amp"),
+                  ("offset", "Offset"),
+                  ("duty", "Duty"),
+                  ("phase", "Phase")
+                ] %}
+                  {% set parameter = output.parameters[key] %}
+                  <span
+                    data-channel-id="{{ parameter.channel.id }}"
+                    data-last-sample-at="{{ parameter.latest.timestamp_utc.isoformat() if parameter.latest else '' }}"
+                    data-last-status="{{ parameter.latest.status if parameter.latest else 'waiting' }}"
+                    data-freshness-timeout="{{ parameter.freshness_timeout_s }}"
+                    {% if key == "frequency" %}data-generator-counter-frequency{% endif %}
+                  >
+                    <small>{{ label }}</small>
+                    <strong data-role="value">
+                      {{ "%.6g" | format(parameter.latest.value) if parameter.latest and parameter.latest.value is not none else "вЂ”" }}
+                    </strong>
+                    <em data-role="unit">{{ parameter.latest.unit if parameter.latest else parameter.channel.unit }}</em>
+                  </span>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+          {% if card.generator_counter %}
+            {% set counter_frequency = card.generator_counter.frequency %}
+            {% set counter_count = card.generator_counter.count %}
+            {% set counter_paused = (
+              counter_frequency.latest and counter_frequency.latest.status == "paused"
+            ) %}
+            {% set counter_counting = (
+              counter_count.latest and counter_count.latest.status == "ok"
+              and counter_count.latest.value is not none
+            ) %}
+            <div class="generator-counter-live">
+              <div class="generator-counter-live-heading">
+                <strong>COUNTER IN</strong>
+                <span class="badge {{ 'good' if (counter_frequency.latest and counter_frequency.latest.value) or counter_counting else 'muted' }}">
+                  {% if counter_paused %}
+                    PAUSED
+                  {% elif counter_counting %}
+                    COUNT
+                  {% else %}
+                    {{ "SIGNAL" if counter_frequency.latest and counter_frequency.latest.value else "IDLE" }}
+                  {% endif %}
+                </span>
+              </div>
+              <div class="generator-counter-live-values">
+                {% for key, label in [
+                  ("frequency", "Frequency"),
+                  ("count", "Count"),
+                  ("period", "Period"),
+                  ("positive_width", "+ width"),
+                  ("negative_width", "− width"),
+                  ("duty", "Duty")
+                ] %}
+                  {% set parameter = card.generator_counter[key] %}
+                  <span
+                    data-channel-id="{{ parameter.channel.id }}"
+                    data-last-sample-at="{{ parameter.latest.timestamp_utc.isoformat() if parameter.latest else '' }}"
+                    data-last-status="{{ parameter.latest.status if parameter.latest else 'waiting' }}"
+                    data-freshness-timeout="{{ parameter.freshness_timeout_s }}"
+                    data-generator-counter-kind="{{ key }}"
+                  >
+                    <small>{{ label }}</small>
+                    <strong data-role="value">
+                      {{ "%.6g" | format(parameter.latest.value) if parameter.latest and parameter.latest.value is not none else "—" }}
+                    </strong>
+                    <em data-role="unit">{{ parameter.latest.unit if parameter.latest else parameter.channel.unit }}</em>
+                  </span>
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+          <div class="generator-footer">
+            <span>Polling <strong data-role="polling-display">{{ card.polling_rate }}</strong></span>
+          </div>
+        </section>
+      {% elif card.source_measure_unit %}
+        {% include "partials/source_measure_unit_panel.html" %}
+      {% elif card.power_supply %}
+        {% set ps = card.power_supply_parameters %}
+        {% set ps_output = ps.output %}
+        {% set ps_set_voltage = ps.set_voltage %}
+        {% set ps_set_current = ps.set_current %}
+        {% set ps_output_voltage = ps.output_voltage %}
+        {% set ps_output_current = ps.output_current %}
+        {% set ps_output_power = ps.output_power %}
+        {% set ps_input_voltage = ps.input_voltage %}
+        {% set ps_temperature = ps.temperature %}
+        {% set ps_capacity = ps.capacity %}
+        {% set ps_energy = ps.energy %}
+        {% set ps_mode = ps.mode %}
+        {% set ps_protection = ps.protection %}
+        {% set ps_metering = ps.metering %}
+        <section class="power-supply-panel">
+          <div class="power-supply-heading">
+            <div class="power-supply-statuses">
+              <form
+                class="power-supply-output-toggle"
+                method="post"
+                action="/ui/devices/{{ card.device.id }}/power-supply/output/toggle"
+                hx-post="/ui/devices/{{ card.device.id }}/power-supply/output/toggle"
+                hx-target="#dashboard-content"
+                hx-swap="innerHTML"
+                hx-disabled-elt="find button"
+              >
+                <input
+                  type="hidden"
+                  name="enabled"
+                  value="{{ 'false' if ps_output.latest and ps_output.latest.quality == 'ON' else 'true' }}"
+                  data-power-supply-output-target
+                >
+                <button
+                  type="submit"
+                  class="badge power-supply-output-button {{ 'good' if ps_output.latest and ps_output.latest.quality == 'ON' else 'muted' }}"
+                  data-channel-id="{{ ps_output.channel.id }}"
+                  data-last-sample-at="{{ ps_output.latest.timestamp_utc.isoformat() if ps_output.latest else '' }}"
+                  data-last-status="{{ ps_output.latest.status if ps_output.latest else 'waiting' }}"
+                  data-freshness-timeout="{{ ps_output.freshness_timeout_s }}"
+                  data-power-supply-output-state
+                  data-role="mode"
+                  title="Toggle DPS-150 output"
+                >{{ ps_output.latest.quality if ps_output.latest else "WAITING" }}</button>
+              </form>
+              <span
+                class="badge {{ 'good' if ps_protection.latest and ps_protection.latest.quality == 'OK' else ('danger' if ps_protection.latest else 'muted') }}"
+                data-channel-id="{{ ps_protection.channel.id }}"
+                data-last-sample-at="{{ ps_protection.latest.timestamp_utc.isoformat() if ps_protection.latest else '' }}"
+                data-last-status="{{ ps_protection.latest.status if ps_protection.latest else 'waiting' }}"
+                data-freshness-timeout="{{ ps_protection.freshness_timeout_s }}"
+                data-power-supply-protection
+                data-role="mode"
+              >{{ ps_protection.latest.quality if ps_protection.latest else "WAITING" }}</span>
+              <span
+                class="badge muted"
+                data-channel-id="{{ ps_mode.channel.id }}"
+                data-last-sample-at="{{ ps_mode.latest.timestamp_utc.isoformat() if ps_mode.latest else '' }}"
+                data-last-status="{{ ps_mode.latest.status if ps_mode.latest else 'waiting' }}"
+                data-freshness-timeout="{{ ps_mode.freshness_timeout_s }}"
+                data-role="mode"
+              >{{ ps_mode.latest.quality if ps_mode.latest else "WAITING" }}</span>
+            </div>
+            <small>Click output state to switch it.</small>
+          </div>
+
+          <div class="power-supply-setpoints">
+            <span
+              data-channel-id="{{ ps_set_voltage.channel.id }}"
+              data-last-sample-at="{{ ps_set_voltage.latest.timestamp_utc.isoformat() if ps_set_voltage.latest else '' }}"
+              data-last-status="{{ ps_set_voltage.latest.status if ps_set_voltage.latest else 'waiting' }}"
+              data-freshness-timeout="{{ ps_set_voltage.freshness_timeout_s }}"
+            >
+              <small>SET VOLTAGE</small>
+              <strong data-role="value">{{ "%.4g" | format(ps_set_voltage.latest.value) if ps_set_voltage.latest and ps_set_voltage.latest.value is not none else "—" }}</strong>
+              <em data-role="unit">V</em>
+            </span>
+            <span
+              data-channel-id="{{ ps_set_current.channel.id }}"
+              data-last-sample-at="{{ ps_set_current.latest.timestamp_utc.isoformat() if ps_set_current.latest else '' }}"
+              data-last-status="{{ ps_set_current.latest.status if ps_set_current.latest else 'waiting' }}"
+              data-freshness-timeout="{{ ps_set_current.freshness_timeout_s }}"
+            >
+              <small>CURRENT LIMIT</small>
+              <strong data-role="value">{{ "%.4g" | format(ps_set_current.latest.value) if ps_set_current.latest and ps_set_current.latest.value is not none else "—" }}</strong>
+              <em data-role="unit">A</em>
+            </span>
+          </div>
+
+          <div class="power-supply-live">
+            {% for parameter, label in [
+              (ps_output_voltage, "Output voltage"),
+              (ps_output_current, "Output current"),
+              (ps_output_power, "Output power")
+            ] %}
+              <span
+                data-channel-id="{{ parameter.channel.id }}"
+                data-last-sample-at="{{ parameter.latest.timestamp_utc.isoformat() if parameter.latest else '' }}"
+                data-last-status="{{ parameter.latest.status if parameter.latest else 'waiting' }}"
+                data-freshness-timeout="{{ parameter.freshness_timeout_s }}"
+              >
+                <small>{{ label }}</small>
+                <strong data-role="value">{{ "%.6g" | format(parameter.latest.value) if parameter.latest and parameter.latest.value is not none else "—" }}</strong>
+                <em data-role="unit">{{ parameter.latest.unit if parameter.latest else parameter.channel.unit }}</em>
+              </span>
+            {% endfor %}
+          </div>
+
+          <div class="power-supply-secondary">
+            {% for parameter, label in [
+              (ps_input_voltage, "Input"),
+              (ps_temperature, "Temperature"),
+              (ps_capacity, "Capacity"),
+              (ps_energy, "Energy")
+            ] %}
+              <span
+                data-channel-id="{{ parameter.channel.id }}"
+                data-last-sample-at="{{ parameter.latest.timestamp_utc.isoformat() if parameter.latest else '' }}"
+                data-last-status="{{ parameter.latest.status if parameter.latest else 'waiting' }}"
+                data-freshness-timeout="{{ parameter.freshness_timeout_s }}"
+              >
+                <small>{{ label }}</small>
+                <strong data-role="value">{{ "%.6g" | format(parameter.latest.value) if parameter.latest and parameter.latest.value is not none else "—" }}</strong>
+                <em data-role="unit">{{ parameter.latest.unit if parameter.latest else parameter.channel.unit }}</em>
+              </span>
+            {% endfor %}
+          </div>
+
+          <div class="power-supply-footer">
+            <span
+              data-channel-id="{{ ps_metering.channel.id }}"
+              data-last-sample-at="{{ ps_metering.latest.timestamp_utc.isoformat() if ps_metering.latest else '' }}"
+              data-last-status="{{ ps_metering.latest.status if ps_metering.latest else 'waiting' }}"
+              data-freshness-timeout="{{ ps_metering.freshness_timeout_s }}"
+            >Metering <strong data-role="mode">{{ ps_metering.latest.quality if ps_metering.latest else "WAITING" }}</strong></span>
+            {% if card.power_program and card.power_program.active %}
+              <span class="power-program-running">
+                {{ card.power_program.kind | replace("_", " ") | upper }}
+                {{ "%.0f" | format(card.power_program.progress_percent) }}%
+              </span>
+            {% endif %}
+            <span>Polling <strong data-role="polling-display">{{ card.polling_rate }}</strong></span>
+          </div>
+        </section>
+      {% elif card.logic_analyzer %}
+        {% include "partials/logic_analyzer_panel.html" %}
+      {% elif card.channels %}
+        {% for channel_card in card.channels %}
+          {% set channel = channel_card.channel %}
+          {% set latest = channel_card.latest %}
+          <section
+            class="channel-panel"
+            data-channel-id="{{ channel.id }}"
+            data-last-sample-at="{{ latest.timestamp_utc.isoformat() if latest else '' }}"
+            data-last-status="{{ latest.status if latest else 'waiting' }}"
+            data-freshness-timeout="{{ channel_card.freshness_timeout_s }}"
+          >
+            <div class="channel-heading">
+              <div>
+                <div class="channel-value">
+                  <strong data-role="value">
+                    {{ "%.6g" | format(latest.value) if latest and latest.value is not none else "—" }}
+                  </strong>
+                  <span data-role="unit">{{ latest.unit if latest else channel.unit }}</span>
+                </div>
+              </div>
+              <span data-role="quality"
+                    class="badge {{ 'good' if latest and latest.status == 'ok' else ('danger' if latest and latest.status == 'invalid' else 'muted') }}"
+                    {% if not card.connected %}hidden{% endif %}>
+                {{ latest.status | replace("_", " ") if latest else "waiting" }}
+              </span>
+            </div>
+            <div class="channel-meta">
+              <span>Mode <strong data-role="mode">{{ latest.quality if latest else "waiting" }}</strong></span>
+              <span>Updated <strong data-role="updated">{{ latest.timestamp_utc.strftime("%H:%M:%S") if latest else "waiting" }}</strong></span>
+              <span>Polling <strong data-role="polling-display">{{ card.polling_rate }}</strong></span>
+            </div>
+          </section>
+        {% endfor %}
+      {% elif card.scope %}
+        {% if maximum %}
+          {% include "partials/scope_maximum_capture_panel.html" %}
+        {% endif %}
+        {% if card.scope_measurements %}<section class="scope-capture-panel">
+          <div class="scope-live-measurements">
+            {% for measurement in card.scope_measurements %}
+              {% set selection = measurement.selection %}
+              {% set latest = measurement.latest %}
+              <div
+                class="scope-live-pill"
+                data-scope-measurement
+                data-scope-channel="{{ selection.channel }}"
+                data-scope-value="{{ latest.scalar.value if latest and latest.scalar.value is not none else '' }}"
+                data-scope-unit="{{ latest.scalar.unit if latest else selection.unit }}"
+                data-channel-id="{{ measurement.event_channel_id }}"
+                data-last-sample-at="{{ latest.timestamp_utc.isoformat() if latest else '' }}"
+                data-last-status="{{ latest.scalar.status if latest else 'waiting' }}"
+                data-freshness-timeout="{{ measurement.freshness_timeout_s }}"
+              >
+                <span class="scope-live-label">{{ selection.source_label }} {{ selection.label }}</span>
+                <span class="scope-live-value">
+                  <strong data-role="value">
+                    {{ "%.6g" | format(latest.scalar.value) if latest and latest.scalar.value is not none else "—" }}
+                  </strong>
+                  <small data-role="unit">{{ latest.scalar.unit if latest else selection.unit }}</small>
+                </span>
+              </div>
+            {% endfor %}
+          </div>
+        </section>{% endif %}
+      {% endif %}
+
+      <div
+        class="instrument-settings-popover{% if card.scope %} scope-settings-popover{% endif %}{% if card.generator or card.power_supply or card.source_measure_unit or card.bidirectional_power_supply or card.logic_analyzer %} generator-settings-popover{% endif %}"
+        id="instrument-settings-{{ card.device.id }}"
+        popover
+        {% if maximum and maximum.active %}inert{% endif %}
+      >
+        <header class="device-popover-header">
+          <div>
+            <strong>{{ card.display_name }} settings</strong>
+            {% if not card.scope and not card.logic_analyzer %}
+              <small>Changes are applied immediately</small>
+            {% endif %}
+          </div>
+          <button
+            class="popover-close"
+            type="button"
+            popovertarget="instrument-settings-{{ card.device.id }}"
+            popovertargetaction="hide"
+            aria-label="Close {{ card.display_name }} settings"
+          >×</button>
+        </header>
+        {% if card.scope %}
+          <form
+            class="scope-measurement-settings"
+            method="post"
+            action="/ui/devices/{{ card.device.id }}/scope-measurements/apply"
+            hx-post="/ui/devices/{{ card.device.id }}/scope-measurements/apply"
+            hx-target="#dashboard-content"
+            hx-swap="innerHTML"
+            hx-disabled-elt="find button"
+          >
+            <input type="hidden" name="scope_capture_present" value="true">
+            <section class="scope-capture-settings">
+              <strong>Saved frame data</strong>
+              <div class="scope-capture-options">
+                {% if 'screenshot_capture' in card.device.capabilities %}
+                  <label>
+                    <input type="checkbox" name="screen" value="true"
+                           {% if card.scope_options.screen %}checked{% endif %}>
+                    <span>Screenshot</span>
+                  </label>
+                {% endif %}
+                <label>
+                  <input type="checkbox" name="data" value="true"
+                         {% if card.scope_options.data %}checked{% endif %}>
+                  <span>Channels</span>
+                </label>
+                <label>
+                  <input type="checkbox" name="wait_for_trigger" value="true"
+                         {% if card.scope_options.wait_for_trigger %}checked{% endif %}>
+                  <span>Wait for trigger</span>
+                </label>
+                <div class="scope-capture-channels">
+                  {% for channel in scope_channels %}
+                    <label>
+                      <input type="checkbox" name="scope_channel" value="{{ channel }}"
+                             aria-label="Capture {{ channel }}"
+                             {% if channel in card.scope_options.channels %}checked{% endif %}>
+                      <span>{{ channel }}</span>
+                    </label>
+                  {% endfor %}
+                </div>
+              </div>
+            </section>
+            <div class="scope-measurement-settings-grid">
+              {% for slot in card.scope_measurement_slots %}
+                {% set selection = slot.selection if slot else none %}
+                {% set secondary = selection.secondary_channel if selection and selection.secondary_channel else ('CH2' if not selection or selection.channel == 'CH1' else 'CH1') %}
+                <div class="scope-measurement-setting-row" data-scope-measurement-setting>
+                  <span>{{ loop.index }}</span>
+                  <select name="measurement_channel" aria-label="Measurement slot {{ loop.index }} channel">
+                    {% for channel in scope_channels %}
+                      <option value="{{ channel }}"
+                              {% if selection and selection.channel == channel %}selected{% endif %}>{{ channel }}</option>
+                    {% endfor %}
+                  </select>
+                  <select name="measurement_item" aria-label="Measurement slot {{ loop.index }} item" data-scope-measurement-item>
+                    <option value="">Unused</option>
+                    {% for option in scope_measurement_options %}
+                      <option value="{{ option.value }}"
+                              {% if selection and selection.item == option.value %}selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                  </select>
+                  <span class="scope-measurement-route" data-scope-pair-control
+                        {% if not selection or selection.item not in ('phase', 'delay') %}hidden{% endif %}>→</span>
+                  <select name="measurement_secondary_channel"
+                          aria-label="Measurement slot {{ loop.index }} secondary channel"
+                          data-scope-pair-control
+                          {% if not selection or selection.item not in ('phase', 'delay') %}hidden{% endif %}>
+                    {% for channel in scope_channels %}
+                      <option value="{{ channel }}" {% if secondary == channel %}selected{% endif %}>{{ channel }}</option>
+                    {% endfor %}
+                  </select>
+                  <div class="scope-delay-edges" data-scope-delay-control
+                       {% if not selection or selection.item != 'delay' %}hidden{% endif %}>
+                    <select name="measurement_source_edge"
+                            aria-label="Measurement slot {{ loop.index }} primary edge">
+                      {% for edge in scope_delay_edges %}
+                        <option value="{{ edge.value }}"
+                                {% if (selection.source_edge if selection and selection.source_edge else 'FRISe') == edge.value %}selected{% endif %}>{{ edge.label }}</option>
+                      {% endfor %}
+                    </select>
+                    <span>→</span>
+                    <select name="measurement_target_edge"
+                            aria-label="Measurement slot {{ loop.index }} secondary edge">
+                      {% for edge in scope_delay_edges %}
+                        <option value="{{ edge.value }}"
+                                {% if (selection.target_edge if selection and selection.target_edge else 'FRISe') == edge.value %}selected{% endif %}>{{ edge.label }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+            <button class="generator-apply" type="submit">Apply settings</button>
+          </form>
+        {% endif %}
+        {% if card.logic_analyzer %}
+          {% set logic = card.logic_settings %}
+          <form
+            class="logic-settings"
+            method="post"
+            action="/ui/devices/{{ card.device.id }}/logic-analyzer/settings"
+            hx-post="/ui/devices/{{ card.device.id }}/logic-analyzer/settings"
+            hx-target="#dashboard-content"
+            hx-swap="innerHTML"
+            hx-disabled-elt="find button"
+          >
+            <section>
+              <header><strong>Acquisition</strong><small>Bounded `.sr` session capture</small></header>
+              <div class="logic-acquisition-grid">
+                <label>
+                  Sample rate
+                  <select name="sample_rate_hz">
+                    {% for rate in logic_sample_rates_hz %}
+                      <option value="{{ rate }}" {% if rate == logic.sample_rate_hz %}selected{% endif %}>
+                        {% if rate >= 1000000 %}
+                          {{ "%g" | format(rate / 1000000) }} MHz
+                        {% else %}
+                          {{ "%g" | format(rate / 1000) }} kHz
+                        {% endif %}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>
+                  Samples
+                  <select name="sample_count">
+                    {% if logic.sample_count not in logic_sample_counts %}
+                      <option value="{{ logic.sample_count }}" selected>
+                        {{ "{:,}".format(logic.sample_count) }} (API)
+                      </option>
+                    {% endif %}
+                    {% for count in logic_sample_counts %}
+                      <option value="{{ count }}" {% if count == logic.sample_count %}selected{% endif %}>
+                        {% if count >= 1000000000 %}
+                          {{ "%g" | format(count / 1000000000) }} GSa
+                        {% elif count >= 1000000 %}
+                          {{ "%g" | format(count / 1000000) }} MSa
+                        {% else %}
+                          {{ "%g" | format(count / 1000) }} KSa
+                        {% endif %}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>
+                  Input threshold
+                  <select name="threshold_v">
+                    {% for threshold in logic_thresholds_v %}
+                      <option value="{{ threshold }}" {% if threshold == logic.threshold_v %}selected{% endif %}>
+                        {{ "%g" | format(threshold) }} V
+                      </option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>
+                  Pre-trigger, %
+                  <input type="number" name="capture_ratio_percent" min="0" max="100"
+                         step="1" required value="{{ logic.capture_ratio_percent }}">
+                </label>
+              </div>
+            </section>
+
+            <section>
+              <header>
+                <strong>Channels & hardware trigger</strong>
+                <small>Channel = capture, T = trigger</small>
+              </header>
+              <div class="logic-trigger-toolbar">
+                <label>
+                  Trigger condition
+                  <select name="trigger_condition">
+                    {% if logic.common_trigger_condition == "mixed" %}
+                      <option value="mixed" selected>Mixed conditions (API)</option>
+                    {% endif %}
+                    {% for value, label in [
+                      ("off", "Off"),
+                      ("low", "Low level"),
+                      ("high", "High level"),
+                      ("rising", "Rising edge"),
+                      ("falling", "Falling edge")
+                    ] %}
+                      <option value="{{ value }}"
+                              {% if logic.common_trigger_condition == value %}selected{% endif %}>
+                        {{ label }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <small>
+                  Level trigger may use several channels. Rising/Falling supports one channel.
+                </small>
+              </div>
+              <div class="logic-channel-grid">
+                {% for channel in range(16) %}
+                  <div>
+                    <label class="logic-channel-enable">
+                      <input type="checkbox" name="channels" value="{{ channel }}"
+                             {% if channel in logic.channels %}checked{% endif %}>
+                      <span>CH{{ channel }}</span>
+                    </label>
+                    <label class="logic-trigger-channel" title="Use CH{{ channel }} as trigger">
+                      <input type="checkbox" name="trigger_channels" value="{{ channel }}"
+                             {% if channel in logic.trigger_channels %}checked{% endif %}>
+                      <span>T</span>
+                    </label>
+                  </div>
+                {% endfor %}
+              </div>
+            </section>
+
+            <div class="logic-settings-footer">
+              <section class="logic-run-settings">
+                <header><strong>Start with global RUN</strong></header>
+                <label class="logic-auto-start">
+                  <input type="checkbox" name="auto_start_enabled" value="true"
+                         {% if logic.auto_start_enabled %}checked{% endif %}>
+                  <span>Enable automatic start</span>
+                </label>
+                <label class="logic-delay-field">
+                  Delay, seconds
+                  <input type="number" name="auto_start_delay_s" min="0" max="86400"
+                         step="0.1" required value="{{ logic.auto_start_delay_s }}">
+                </label>
+              </section>
+              <button class="generator-apply logic-apply" type="submit">
+                <span>Apply</span><span>all</span>
+              </button>
+            </div>
+          </form>
+        {% elif card.bidirectional_power_supply %}
+          {% include "partials/bidirectional_power_supply_settings.html" %}
+        {% elif card.generator %}
+          <div class="generator-settings">
+            <div class="generator-settings-grid">
+              {% for output in card.generator_outputs %}
+                {% set waveform = output.parameters.waveform %}
+                {% set frequency = output.parameters.frequency %}
+                {% set amplitude = output.parameters.amplitude %}
+                {% set offset = output.parameters.offset %}
+                {% set duty = output.parameters.duty %}
+                {% set phase = output.parameters.phase %}
+                {% set output_state = output.parameters.output %}
+                <form
+                  class="generator-channel-form"
+                  method="post"
+                  action="/ui/devices/{{ card.device.id }}/generator/channels/{{ output.number }}"
+                  hx-post="/ui/devices/{{ card.device.id }}/generator/channels/{{ output.number }}"
+                  hx-target="#dashboard-content"
+                  hx-swap="innerHTML"
+                  hx-disabled-elt="find button"
+                >
+                  <header>
+                    <strong>{{ output.label }}</strong>
+                    <small>Output is paused while signal parameters change.</small>
+                  </header>
+                  <label class="generator-field-wide">
+                    Waveform
+                    <select name="waveform_code">
+                      {% for code, name in card.generator_waveforms %}
+                        <option value="{{ code }}"
+                          {% if waveform.latest and waveform.latest.value | int == code %}selected{% endif %}
+                        >{{ "%02d" | format(code) }} · {{ name }}</option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                  <label>
+                    Frequency, Hz
+                    <input
+                      type="number"
+                      name="frequency_hz"
+                      min="0"
+                      step="0.000001"
+                      required
+                      value="{{ '%.6f' | format(frequency.latest.value) if frequency.latest and frequency.latest.value is not none else 0 }}"
+                    >
+                  </label>
+                  <label>
+                    Amplitude, Vpp
+                    <input
+                      type="number"
+                      name="amplitude_vpp"
+                      min="0.001"
+                      max="19.999"
+                      step="0.001"
+                      required
+                      value="{{ '%.3f' | format(amplitude.latest.value) if amplitude.latest and amplitude.latest.value is not none else 0.001 }}"
+                    >
+                  </label>
+                  <label>
+                    Offset, V
+                    <input
+                      type="number"
+                      name="offset_v"
+                      min="-10"
+                      max="10"
+                      step="0.001"
+                      required
+                      value="{{ '%.3f' | format(offset.latest.value) if offset.latest and offset.latest.value is not none else 0 }}"
+                    >
+                  </label>
+                  <label>
+                    Duty, %
+                    <input
+                      type="number"
+                      name="duty_percent"
+                      min="0.01"
+                      max="99.99"
+                      step="0.01"
+                      required
+                      value="{{ '%.2f' | format(duty.latest.value) if duty.latest and duty.latest.value is not none else 50 }}"
+                    >
+                  </label>
+                  <label>
+                    Phase, °
+                    <input
+                      type="number"
+                      name="phase_deg"
+                      min="0"
+                      max="359.99"
+                      step="0.01"
+                      required
+                      value="{{ '%.2f' | format(phase.latest.value) if phase.latest and phase.latest.value is not none else 0 }}"
+                    >
+                  </label>
+                  <label>
+                    Output
+                    <select name="output_enabled">
+                      <option value="false"
+                        {% if not output_state.latest or output_state.latest.quality != "ON" %}selected{% endif %}
+                      >OFF</option>
+                      <option value="true"
+                        {% if output_state.latest and output_state.latest.quality == "ON" %}selected{% endif %}
+                      >ON</option>
+                    </select>
+                  </label>
+                  <button class="generator-apply" type="submit">Apply & verify</button>
+                </form>
+              {% endfor %}
+            </div>
+
+            <div class="generator-utility-grid">
+              <form
+                class="generator-utility-form"
+                method="post"
+                action="/ui/devices/{{ card.device.id }}/generator/synchronization"
+                hx-post="/ui/devices/{{ card.device.id }}/generator/synchronization"
+                hx-target="#dashboard-content"
+                hx-swap="innerHTML"
+              >
+                <strong>CH2 follows CH1</strong>
+                <select name="parameter" aria-label="Synchronization parameter">
+                  <option value="waveform">Waveform</option>
+                  <option value="frequency">Frequency</option>
+                  <option value="amplitude">Amplitude</option>
+                  <option value="offset">Offset</option>
+                  <option value="duty">Duty</option>
+                </select>
+                <select name="enabled" aria-label="Synchronization state">
+                  <option value="true">Enable</option>
+                  <option value="false">Disable</option>
+                </select>
+                <button type="submit">Apply</button>
+              </form>
+
+              <form
+                class="generator-utility-form"
+                method="post"
+                action="/ui/devices/{{ card.device.id }}/generator/preset"
+                hx-post="/ui/devices/{{ card.device.id }}/generator/preset"
+                hx-target="#dashboard-content"
+                hx-swap="innerHTML"
+              >
+                <strong>Instrument preset</strong>
+                <select name="slot" aria-label="Preset slot">
+                  {% for slot in range(1, 21) %}
+                    <option value="{{ slot }}">{{ "%02d" | format(slot) }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit" name="action" value="save">Save</button>
+                <button class="secondary" type="submit" name="action" value="load">Load</button>
+                <small>Loading restores both stored channels and may enable their outputs.</small>
+              </form>
+            </div>
+
+            <section
+              class="generator-advanced-slot"
+              id="generator-advanced-{{ card.device.id }}"
+              hx-get="/ui/devices/{{ card.device.id }}/generator/advanced"
+              hx-trigger="load"
+              hx-swap="innerHTML"
+            >
+              <small>Reading burst, modulation and counter state…</small>
+            </section>
+          </div>
+        {% elif card.source_measure_unit %}
+          {% include "partials/source_measure_unit_settings.html" %}
+        {% elif card.power_supply %}
+          {% set state = card.power_supply_state %}
+          {% set ps = card.power_supply_parameters %}
+          <div class="power-supply-settings">
+            <div class="power-supply-settings-grid">
+              <form
+                class="power-supply-settings-form"
+                method="post"
+                action="/ui/devices/{{ card.device.id }}/power-supply/output"
+                hx-post="/ui/devices/{{ card.device.id }}/power-supply/output"
+                hx-target="#dashboard-content"
+                hx-swap="innerHTML"
+                hx-disabled-elt="find button"
+              >
+                <header>
+                  <strong>Output</strong>
+                  <small>
+                    Available:
+                    {{ "%.3g" | format(state.upper_voltage_v) if state else "30" }} V /
+                    {{ "%.3g" | format(state.upper_current_a) if state else "5" }} A
+                  </small>
+                </header>
+                <label>
+                  Voltage, V
+                  <input type="number" name="voltage_v" min="0"
+                         max="{{ state.upper_voltage_v if state else 30 }}"
+                         step="0.01" required
+                         value="{{ '%.2f' | format(state.set_voltage_v) if state else 0 }}">
+                </label>
+                <label>
+                  Current limit, A
+                  <input type="number" name="current_a" min="0"
+                         max="{{ state.upper_current_a if state else 5 }}"
+                         step="0.001" required
+                         value="{{ '%.3f' | format(state.set_current_a) if state else 0 }}">
+                </label>
+                <label class="power-supply-wide">
+                  Output state
+                  <select name="enabled">
+                    <option value="false" {% if not state or not state.output_enabled %}selected{% endif %}>OFF</option>
+                    <option value="true" {% if state and state.output_enabled %}selected{% endif %}>ON</option>
+                  </select>
+                </label>
+                <button class="power-supply-wide generator-apply" type="submit">
+                  Apply & verify
+                </button>
+              </form>
+
+              <form
+                class="power-supply-settings-form"
+                method="post"
+                action="/ui/devices/{{ card.device.id }}/power-supply/protections"
+                hx-post="/ui/devices/{{ card.device.id }}/power-supply/protections"
+                hx-target="#dashboard-content"
+                hx-swap="innerHTML"
+                hx-disabled-elt="find button"
+              >
+                <header>
+                  <strong>Protections</strong>
+                  <small>Hardware read-back</small>
+                </header>
+                <label>OVP, V
+                  <input type="number" name="over_voltage_v" min="0" max="30" step="0.01"
+                         required value="{{ '%.2f' | format(state.protections.over_voltage_v) if state else 30 }}">
+                </label>
+                <label>OCP, A
+                  <input type="number" name="over_current_a" min="0" max="5.1" step="0.001"
+                         required value="{{ '%.3f' | format(state.protections.over_current_a) if state else 5.1 }}">
+                </label>
+                <label>OPP, W
+                  <input type="number" name="over_power_w" min="0" max="150" step="0.1"
+                         required value="{{ '%.1f' | format(state.protections.over_power_w) if state else 150 }}">
+                </label>
+                <label>OTP, °C
+                  <input type="number" name="over_temperature_c" min="0" max="100" step="0.1"
+                         required value="{{ '%.1f' | format(state.protections.over_temperature_c) if state else 80 }}">
+                </label>
+                <label class="power-supply-wide">Input LVP, V
+                  <input type="number" name="low_input_voltage_v" min="0" max="30" step="0.01"
+                         required value="{{ '%.2f' | format(state.protections.low_input_voltage_v) if state else 5 }}">
+                </label>
+                <button class="power-supply-wide generator-apply" type="submit">
+                  Apply & verify
+                </button>
+              </form>
+            </div>
+
+            <div class="power-supply-utility-grid">
+              <form
+                class="power-supply-utility"
+                method="post"
+                action="/ui/devices/{{ card.device.id }}/power-supply/display"
+                hx-post="/ui/devices/{{ card.device.id }}/power-supply/display"
+                hx-target="#dashboard-content"
+                hx-swap="innerHTML"
+              >
+                <strong>Display & sound</strong>
+                <label>Brightness
+                  <input type="number" name="brightness" min="0" max="10" step="1"
+                         value="{{ state.brightness if state else 5 }}">
+                </label>
+                <label>Volume
+                  <input type="number" name="volume" min="0" max="10" step="1"
+                         value="{{ state.volume if state else 5 }}">
+                </label>
+                <button type="submit">Apply</button>
+              </form>
+
+              <form
+                class="power-supply-utility power-supply-metering-actions"
+                method="post"
+                action="/ui/devices/{{ card.device.id }}/power-supply/metering"
+                hx-post="/ui/devices/{{ card.device.id }}/power-supply/metering"
+                hx-target="#dashboard-content"
+                hx-swap="innerHTML"
+              >
+                <strong>Ah / Wh metering</strong>
+                <button type="submit" name="action" value="start">Start</button>
+                <button type="submit" name="action" value="stop" class="secondary">Stop</button>
+              </form>
+            </div>
+
+            <details class="power-supply-details">
+              <summary>Six instrument presets</summary>
+              <div class="power-supply-presets">
+                {% for preset in state.presets if state %}
+                  <div class="power-supply-preset-row">
+                    <strong>{{ preset.slot }}</strong>
+                    <form
+                      method="post"
+                      action="/ui/devices/{{ card.device.id }}/power-supply/preset/save"
+                      hx-post="/ui/devices/{{ card.device.id }}/power-supply/preset/save"
+                      hx-target="#dashboard-content"
+                      hx-swap="innerHTML"
+                    >
+                      <input type="hidden" name="slot" value="{{ preset.slot }}">
+                      <input type="number" name="voltage_v" min="0"
+                             max="{{ state.upper_voltage_v }}" step="0.01"
+                             value="{{ '%.2f' | format(preset.voltage_v) }}" aria-label="Preset voltage">
+                      <input type="number" name="current_a" min="0"
+                             max="{{ state.upper_current_a }}" step="0.001"
+                             value="{{ '%.3f' | format(preset.current_a) }}" aria-label="Preset current">
+                      <button type="submit">Save</button>
+                    </form>
+                    <form
+                      method="post"
+                      action="/ui/devices/{{ card.device.id }}/power-supply/preset/apply"
+                      hx-post="/ui/devices/{{ card.device.id }}/power-supply/preset/apply"
+                      hx-target="#dashboard-content"
+                      hx-swap="innerHTML"
+                    >
+                      <input type="hidden" name="slot" value="{{ preset.slot }}">
+                      <button class="secondary" type="submit">Apply</button>
+                    </form>
+                  </div>
+                {% else %}
+                  <small>Waiting for DPS-150 state.</small>
+                {% endfor %}
+              </div>
+            </details>
+
+            <details class="power-supply-details">
+              <summary>Programmable output</summary>
+              <div class="power-program-grid">
+                <form
+                  class="power-program-form"
+                  method="post"
+                  action="/ui/devices/{{ card.device.id }}/power-supply/program/sweep"
+                  hx-post="/ui/devices/{{ card.device.id }}/power-supply/program/sweep"
+                  hx-target="#dashboard-content"
+                  hx-swap="innerHTML"
+                >
+                  <strong>Voltage / current sweep</strong>
+                  <select name="parameter">
+                    <option value="voltage">Voltage</option>
+                    <option value="current">Current</option>
+                  </select>
+                  <input type="number" name="start" min="0" max="30" step="0.001" value="0" aria-label="Sweep start">
+                  <input type="number" name="end" min="0" max="30" step="0.001" value="1" aria-label="Sweep end">
+                  <input type="number" name="step" min="0.001" max="30" step="0.001" value="0.1" aria-label="Sweep step">
+                  <input type="number" name="fixed_value" min="0" max="30" step="0.001" value="0.05" aria-label="Fixed current or voltage">
+                  <input type="number" name="dwell_s" min="1" max="86400" step="1" value="1" aria-label="Dwell seconds">
+                  <input type="number" name="loops" min="1" max="1000" step="1" value="1" aria-label="Loops">
+                  <button type="submit">Start sweep</button>
+                </form>
+                <form
+                  class="power-program-form power-sequence-form"
+                  method="post"
+                  action="/ui/devices/{{ card.device.id }}/power-supply/program/sequence"
+                  hx-post="/ui/devices/{{ card.device.id }}/power-supply/program/sequence"
+                  hx-target="#dashboard-content"
+                  hx-swap="innerHTML"
+                >
+                  <strong>Sequence</strong>
+                  <textarea name="steps" rows="4"
+                            placeholder="voltage,current,dwell&#10;1.00,0.050,1.0"></textarea>
+                  <input type="number" name="loops" min="1" max="1000" step="1" value="1" aria-label="Loops">
+                  <button type="submit">Start sequence</button>
+                </form>
+              </div>
+              {% if card.power_program and card.power_program.active %}
+                <div class="power-program-controls">
+                  <span>
+                    {{ card.power_program.kind | replace("_", " ") }}
+                    · {{ card.power_program.current_step }}/{{ card.power_program.total_steps }}
+                    · {{ "%.0f" | format(card.power_program.progress_percent) }}%
+                  </span>
+                  {% for action in ["pause", "resume", "stop"] %}
+                    <form
+                      method="post"
+                      action="/ui/devices/{{ card.device.id }}/power-supply/program/{{ action }}"
+                      hx-post="/ui/devices/{{ card.device.id }}/power-supply/program/{{ action }}"
+                      hx-target="#dashboard-content"
+                      hx-swap="innerHTML"
+                    ><button class="{{ 'disconnect-button' if action == 'stop' else 'secondary' }}" type="submit">{{ action | title }}</button></form>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </details>
+          </div>
+        {% endif %}
+        <div class="instrument-settings-fields{% if card.logic_analyzer %} logic-context-settings{% endif %}">
+          {% if not card.logic_analyzer %}
+            <label>
+              Polling rate
+              <select
+                name="interval_s"
+                data-device-polling-input
+                data-device-id="{{ card.device.id }}"
+                hx-post="/ui/devices/{{ card.device.id }}/polling"
+                hx-trigger="change"
+                hx-swap="none"
+              >
+                {% for option in card.interval_options %}
+                  <option
+                    value="{{ option.value }}"
+                    {% if option.value == card.poll_interval_s %}selected{% endif %}
+                  >{{ option.label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          {% endif %}
+          <label>
+            Measurement context
+            <textarea
+              name="instrument_context"
+              maxlength="10000"
+              rows="4"
+              placeholder="What is this instrument measuring?"
+              data-instrument-context-input
+              data-device-id="{{ card.device.id }}"
+              hx-post="/ui/devices/{{ card.device.id }}/context"
+              hx-trigger="input changed delay:500ms"
+              hx-swap="none"
+            >{{ card.instrument_context }}</textarea>
+          </label>
+        </div>
+      </div>
+    </article>
+  {% else %}
+    <div class="card empty-instruments">
+      No instruments configured. Open Devices above and choose what to find.
+    </div>
+  {% endfor %}
+</section>
+
+<section class="compact-actions">
+  <a class="text-link" href="/matrix">Electrical Matrix</a>
+  <form hx-post="/ui/emergency-stop" hx-target="#dashboard-content" hx-swap="innerHTML">
+    <button class="emergency compact-emergency" type="submit">ALL OUTPUTS OFF</button>
+  </form>
+  {% if safety.state != "safe" %}
+    <strong class="alarm-copy">{{ safety.reason or "Emergency stop active" }}</strong>
+    <form hx-post="/ui/simulation/reset-safety" hx-target="#dashboard-content" hx-swap="innerHTML">
+      <button class="secondary" type="submit">Reset safety</button>
+    </form>
+  {% endif %}
+</section>

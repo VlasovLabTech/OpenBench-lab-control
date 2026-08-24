@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenBench"
+  short_description: "Control instruments and orchestrate OpenBench experiments"
+  default_prompt: "Use $openbench to inspect instruments, safely control supported outputs, and run measurement or logic-analyzer captures."

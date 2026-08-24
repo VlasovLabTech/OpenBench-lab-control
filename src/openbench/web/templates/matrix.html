@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Matrix · OpenBench{% endblock %}
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">ROUTING CONTROL</p>
+      <h1>Commutation Matrix</h1>
+      <p>Build, validate and atomically apply logical bench connections.</p>
+    </div>
+    <span class="badge {% if safety.state == 'safe' %}good{% else %}danger{% endif %}">
+      SAFETY {{ safety.state | replace('_', ' ') | upper }}
+    </span>
+  </section>
+  <div id="matrix-panel">
+    {% include "partials/matrix_panel.html" %}
+  </div>
+{% endblock %}

@@ -1,0 +1,50 @@
+name: Feature request
+description: Propose a focused OpenBench improvement
+title: "[Feature]: "
+labels: []
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Explain the laboratory workflow and safety boundary, not only the desired UI.
+        Do not include confidential bench details or proprietary protocol material.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and discussions for this request.
+          required: true
+        - label: This request does not require an arbitrary command or safety bypass.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow
+      description: What laboratory task is difficult or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful behavior and expected result.
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Relevant hardware
+      description: Model and transport only; never include a serial number
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and privacy considerations
+      description: Explain outputs, wiring, stored data, network exposure, or other risks.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

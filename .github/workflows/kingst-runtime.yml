@@ -1,0 +1,48 @@
+name: Build Kingst Windows runtime
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/build-kingst-sigrok.ps1"
+      - "scripts/kingst-runtime.lock.json"
+      - "scripts/patches/**"
+      - ".github/workflows/kingst-runtime.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            base-devel
+            git
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-check
+            mingw-w64-ucrt-x86_64-glib2
+            mingw-w64-ucrt-x86_64-hidapi
+            mingw-w64-ucrt-x86_64-libftdi
+            mingw-w64-ucrt-x86_64-libserialport
+            mingw-w64-ucrt-x86_64-libusb
+            mingw-w64-ucrt-x86_64-libzip
+      - name: Build and package
+        shell: powershell
+        run: scripts\build-kingst-sigrok.ps1 -MsysRoot C:\msys64 -SkipPackageInstall
+      - name: Verify manifest
+        shell: powershell
+        run: |
+          $manifest = Get-Content .openbench\tools\sigrok-modern\runtime-manifest.json -Raw | ConvertFrom-Json
+          if (-not $manifest.files -or -not $manifest.libsigrok_commit) { throw "Invalid runtime manifest" }
+          .openbench\tools\sigrok-modern\sigrok-cli.exe --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openbench-sigrok-windows-x64
+          path: .openbench/tools/sigrok-modern
+          if-no-files-found: error

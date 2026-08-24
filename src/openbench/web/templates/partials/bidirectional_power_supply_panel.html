@@ -1,0 +1,48 @@
+{% set state = card.bidirectional_state %}
+{% set bp = card.bidirectional_parameters %}
+<section class="itech-panel">
+  {% if state %}
+    <div class="itech-status-line">
+      <div class="power-supply-statuses">
+        <span class="badge {{ 'danger' if state.output_enabled else 'muted' }}">OUTPUT {{ 'ON' if state.output_enabled else 'OFF' }}</span>
+        <span class="badge {{ 'good' if state.function_mode == 'FIXED' else 'danger' }}">{{ state.priority }} · {{ state.function_mode }}</span>
+        <span class="badge {{ 'danger' if state.direction == 'SINK' else ('good' if state.direction == 'SOURCE' else 'muted') }}">{{ state.direction }} · {{ state.regulation }}</span>
+        {% if state.faults %}<span class="badge danger">{{ state.faults | join(' + ') }}</span>{% endif %}
+      </div>
+      {% if state.output_enabled %}
+        <form method="post" action="/ui/devices/{{ card.device.id }}/bidirectional/output-off"
+              hx-post="/ui/devices/{{ card.device.id }}/bidirectional/output-off"
+              hx-target="#dashboard-content" hx-swap="innerHTML">
+          <button class="disconnect-button itech-off-button" type="submit">Output OFF</button>
+        </form>
+      {% endif %}
+    </div>
+    <div class="itech-primary">
+      {% for key, label, value, unit in [('voltage', 'Voltage', state.measured_voltage_v, 'V'), ('current', 'Current', state.measured_current_a, 'A')] %}
+        {% set parameter = bp.get(key) %}
+        <span {% if parameter %}data-channel-id="{{ parameter.channel.id }}"
+          data-last-sample-at="{{ parameter.latest.timestamp_utc.isoformat() if parameter.latest else '' }}"
+          data-last-status="{{ parameter.latest.status if parameter.latest else 'waiting' }}"
+          data-freshness-timeout="{{ parameter.freshness_timeout_s }}"{% endif %}>
+          <small>{{ label }}</small>
+          <strong data-role="value">{{ '%.6g' | format(value) }}</strong>
+          <em data-role="unit">{{ unit }}</em>
+        </span>
+      {% endfor %}
+    </div>
+    <div class="itech-summary-grid">
+      <span><small>Power</small><strong>{{ '%.6g' | format(state.measured_power_w) }}</strong><em>W</em></span>
+      <span><small>Set V</small><strong>{{ '%.6g' | format(state.voltage_setpoint_v) }}</strong><em>V</em></span>
+      <span><small>Set I</small><strong>{{ '%.6g' | format(state.current_setpoint_a) }}</strong><em>A</em></span>
+      <span><small>I limits</small><strong>+{{ '%.6g' | format(state.current_limit_positive_a) }} / {{ '%.6g' | format(state.current_limit_negative_a) }}</strong><em>A</em></span>
+      <span><small>V limits</small><strong>+{{ '%.6g' | format(state.voltage_limit_positive_v) }} / {{ '%.6g' | format(state.voltage_limit_negative_v) }}</strong><em>V</em></span>
+      <span><small>P limits</small><strong>+{{ '%.6g' | format(state.power_limit_positive_w) }} / {{ '%.6g' | format(state.power_limit_negative_w) }}</strong><em>W</em></span>
+    </div>
+    <div class="power-supply-footer">
+      <span>Polling <strong data-role="polling-display">{{ card.polling_rate }}</strong></span>
+      <span>{{ card.bidirectional_instrument.descriptor.baud_rate }} baud · SN {{ card.bidirectional_instrument.identity.serial_number }}</span>
+    </div>
+  {% else %}
+    <div class="channel-empty">Waiting for IT6054C state…</div>
+  {% endif %}
+</section>

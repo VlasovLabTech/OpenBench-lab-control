@@ -1,0 +1,68 @@
+diff --git a/src/usb.c b/src/usb.c
+index feafe9d..b5d2c4b 100644
+--- a/src/usb.c
++++ b/src/usb.c
+@@ -50,6 +50,7 @@ struct usb_source {
+ 
+ 	struct libusb_context *usb_ctx;
+ 	GPtrArray *pollfds;
++	gboolean poll_notifiers_registered;
+ };
+ 
+ /** USB event source prepare() method.
+@@ -160,7 +161,8 @@ static void usb_source_finalize(GSource *source)
+ 
+ 	sr_spew("%s", __func__);
+ 
+-	libusb_set_pollfd_notifiers(usource->usb_ctx, NULL, NULL, NULL);
++	if (usource->poll_notifiers_registered)
++		libusb_set_pollfd_notifiers(usource->usb_ctx, NULL, NULL, NULL);
+ 
+ 	g_ptr_array_unref(usource->pollfds);
+ 	usource->pollfds = NULL;
+@@ -263,8 +265,19 @@ static GSource *usb_source_new(struct sr_session *session,
+ 
+ 	upollfds = libusb_get_pollfds(usb_ctx);
+ 	if (!upollfds) {
++#ifndef _WIN32
+ 		sr_err("Failed to get libusb file descriptors.");
+ 		return NULL;
++#else
++		/*
++		 * Upstream libusb does not expose pollable handles on Windows.
++		 * Drivers process completed transfers from their receive callback,
++		 * so use a short timer-backed GLib source instead.
++		 */
++		sr_dbg("libusb has no pollable Windows handles; using timer events.");
++		if (timeout_ms < 0 || timeout_ms > 5)
++			timeout_ms = 5;
++#endif
+ 	}
+ 	source = g_source_new(&usb_source_funcs, sizeof(struct usb_source));
+ 	usource = (struct usb_source *)source;
+@@ -282,16 +295,19 @@ static GSource *usb_source_new(struct sr_session *session,
+ 	usource->usb_ctx = usb_ctx;
+ 	usource->pollfds = g_ptr_array_new_full(8, &usb_source_free_pollfd);
+ 
+-	for (upfd = upollfds; *upfd != NULL; upfd++)
+-		usb_pollfd_added((*upfd)->fd, (*upfd)->events, usource);
++	if (upollfds) {
++		for (upfd = upollfds; *upfd != NULL; upfd++)
++			usb_pollfd_added((*upfd)->fd, (*upfd)->events, usource);
+ 
+ #if (LIBUSB_API_VERSION >= 0x01000104)
+-	libusb_free_pollfds(upollfds);
++		libusb_free_pollfds(upollfds);
+ #else
+-	free(upollfds);
++		free(upollfds);
+ #endif
+-	libusb_set_pollfd_notifiers(usb_ctx,
+-		&usb_pollfd_added, &usb_pollfd_removed, usource);
++		libusb_set_pollfd_notifiers(usb_ctx,
++			&usb_pollfd_added, &usb_pollfd_removed, usource);
++		usource->poll_notifiers_registered = TRUE;
++	}
+ 
+ 	return source;
+ }

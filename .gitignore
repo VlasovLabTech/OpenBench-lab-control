@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+dist/
+build/
+openbench.db
+*.db-shm
+*.db-wal
+*.db-journal
+.idea/
+.vscode/
+.openbench/
+# Legacy local-output locations; current releases keep all runtime data in .openbench/.
+captures/
+tmp/
+.tmp/

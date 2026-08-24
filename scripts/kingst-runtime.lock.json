@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "platform": "windows-x86_64",
+  "sources": {
+    "libsigrok": {
+      "repository": "https://github.com/sigrokproject/libsigrok.git",
+      "commit": "0bc2487778e660f4d3116729b6f4aee2b1996bb0"
+    },
+    "sigrok_cli": {
+      "repository": "https://github.com/sigrokproject/sigrok-cli.git",
+      "commit": "f44dd91347e7ac797cefc23162b9fcf0b7329f1f"
+    },
+    "sigrok_util": {
+      "repository": "https://github.com/sigrokproject/sigrok-util.git",
+      "commit": "249b79d0a94e9ac4ec96533bf3108e2a50e6b38d"
+    }
+  },
+  "patch": {
+    "path": "scripts/patches/libsigrok-windows-timer-events.patch",
+    "sha256": "3F7D24C0AC337ACB4FFA92A9F06C0069C2F3D9DB78025496B7EF94D8FE85D7AA"
+  },
+  "vendor_firmware_source": {
+    "name": "KingstVIS",
+    "version": "3.6.5",
+    "url": "https://www.qdkingst.com/kfs/KingstVIS_v3.6.5.tar.gz",
+    "sha256": "E87D80B528EB086669C4F05E86C156290251BD587838B1CE842A93673C7A1275",
+    "binary_path": "KingstVIS/KingstVIS"
+  },
+  "extractor_files": [
+    {
+      "path": "firmware/kingst-la/sigrok-fwextract-kingst-la2016",
+      "sha256": "FE2908490B13B360A5F0FDEB955EBB2C880B4CF190BB4E8F66341A0D99DD2483"
+    },
+    {
+      "path": "firmware/saleae-logic16/parseelf.py",
+      "sha256": "86924AB34DCC1F56BD9FA4BB371836D442717E6A08F2A5760504B72D3F9450EE"
+    }
+  ],
+  "validated_firmware": [
+    {
+      "name": "kingst-la-01a2.fw",
+      "size": 5430,
+      "sha256": "87A8BBC96BED5E179069717F971E05B3A3D1703D4EF096F2B276D454F129BD22"
+    },
+    {
+      "name": "kingst-la2016a1-fpga.bitstream",
+      "size": 178362,
+      "sha256": "9110D239F8F117D3333574F5493D477873FEEF73DB82EE8025D68C73A381A159"
+    }
+  ],
+  "runtime": {
+    "libusb_version": "1.0.30",
+    "required_files": [
+      "sigrok-cli.exe",
+      "libsigrok-4.dll",
+      "libusb-1.0.dll"
+    ]
+  }
+}

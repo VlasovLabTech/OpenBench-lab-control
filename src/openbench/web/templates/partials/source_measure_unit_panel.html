@@ -1,0 +1,114 @@
+{% set smu = card.source_measure_parameters %}
+{% set output = smu.output %}
+{% set protection = smu.protection %}
+{% set mode = smu.mode %}
+{% set set_voltage = smu.set_voltage %}
+{% set set_current = smu.set_current %}
+{% set output_voltage = smu.output_voltage %}
+{% set output_current = smu.output_current %}
+{% set output_power = smu.output_power %}
+{% set dmm = smu.dmm %}
+<section class="power-supply-panel source-measure-panel">
+  <div class="power-supply-heading">
+    <div class="power-supply-statuses">
+      <form
+        class="power-supply-output-toggle"
+        method="post"
+        action="/ui/devices/{{ card.device.id }}/source-measure/output/toggle"
+        hx-post="/ui/devices/{{ card.device.id }}/source-measure/output/toggle"
+        hx-target="#dashboard-content"
+        hx-swap="innerHTML"
+        hx-disabled-elt="find button"
+      >
+        <input type="hidden" name="enabled"
+               value="{{ 'false' if output.latest and output.latest.quality == 'ON' else 'true' }}">
+        <button
+          type="submit"
+          class="badge power-supply-output-button {{ 'good' if output.latest and output.latest.quality == 'ON' else 'muted' }}"
+          data-channel-id="{{ output.channel.id }}"
+          data-last-sample-at="{{ output.latest.timestamp_utc.isoformat() if output.latest else '' }}"
+          data-last-status="{{ output.latest.status if output.latest else 'waiting' }}"
+          data-freshness-timeout="{{ output.freshness_timeout_s }}"
+          data-power-supply-output-state
+          data-role="mode"
+          title="Toggle SPM source output"
+        >{{ output.latest.quality if output.latest else "WAITING" }}</button>
+      </form>
+      <span
+        class="badge {{ 'danger' if protection.latest and protection.latest.status == 'protection' else ('good' if protection.latest else 'muted') }}"
+        data-channel-id="{{ protection.channel.id }}"
+        data-last-sample-at="{{ protection.latest.timestamp_utc.isoformat() if protection.latest else '' }}"
+        data-last-status="{{ protection.latest.status if protection.latest else 'waiting' }}"
+        data-freshness-timeout="{{ protection.freshness_timeout_s }}"
+        data-power-supply-protection
+        data-role="mode"
+      >{{ protection.latest.quality | upper if protection.latest else "WAITING" }}</span>
+      <span
+        class="badge muted"
+        data-channel-id="{{ mode.channel.id }}"
+        data-last-sample-at="{{ mode.latest.timestamp_utc.isoformat() if mode.latest else '' }}"
+        data-last-status="{{ mode.latest.status if mode.latest else 'waiting' }}"
+        data-freshness-timeout="{{ mode.freshness_timeout_s }}"
+        data-role="mode"
+      >{{ mode.latest.quality if mode.latest else "WAITING" }}</span>
+    </div>
+    <small>Source</small>
+  </div>
+
+  <div class="power-supply-setpoints">
+    {% for parameter, label in [(set_voltage, "Set voltage"), (set_current, "Current limit")] %}
+      <span
+        data-channel-id="{{ parameter.channel.id }}"
+        data-last-sample-at="{{ parameter.latest.timestamp_utc.isoformat() if parameter.latest else '' }}"
+        data-last-status="{{ parameter.latest.status if parameter.latest else 'waiting' }}"
+        data-freshness-timeout="{{ parameter.freshness_timeout_s }}"
+      >
+        <small>{{ label }}</small>
+        <strong data-role="value">{{ "%.6g" | format(parameter.latest.value) if parameter.latest and parameter.latest.value is not none else "—" }}</strong>
+        <em data-role="unit">{{ parameter.latest.unit if parameter.latest else parameter.channel.unit }}</em>
+      </span>
+    {% endfor %}
+  </div>
+
+  <div class="power-supply-live">
+    {% for parameter, label in [
+      (output_voltage, "Output voltage"),
+      (output_current, "Output current"),
+      (output_power, "Output power")
+    ] %}
+      <span
+        data-channel-id="{{ parameter.channel.id }}"
+        data-last-sample-at="{{ parameter.latest.timestamp_utc.isoformat() if parameter.latest else '' }}"
+        data-last-status="{{ parameter.latest.status if parameter.latest else 'waiting' }}"
+        data-freshness-timeout="{{ parameter.freshness_timeout_s }}"
+      >
+        <small>{{ label }}</small>
+        <strong data-role="value">{{ "%.6g" | format(parameter.latest.value) if parameter.latest and parameter.latest.value is not none else "—" }}</strong>
+        <em data-role="unit">{{ parameter.latest.unit if parameter.latest else parameter.channel.unit }}</em>
+      </span>
+    {% endfor %}
+  </div>
+
+  <div
+    class="source-measure-dmm"
+    data-source-measure-dmm
+    data-channel-id="{{ dmm.channel.id }}"
+    data-last-sample-at="{{ dmm.latest.timestamp_utc.isoformat() if dmm.latest else '' }}"
+    data-last-status="{{ dmm.latest.status if dmm.latest else 'waiting' }}"
+    data-freshness-timeout="{{ dmm.freshness_timeout_s }}"
+  >
+    <div>
+      <small>Multimeter</small>
+      <strong data-role="value">{{ "%.7g" | format(dmm.latest.value) if dmm.latest and dmm.latest.value is not none else "—" }}</strong>
+      <em data-role="unit">{{ dmm.latest.unit if dmm.latest else "" }}</em>
+    </div>
+    <span data-role="mode">{{ dmm.latest.quality | replace("_", " ") if dmm.latest else "waiting" }}</span>
+    {% if card.source_measure_state %}
+      <span>{{ card.source_measure_state.multimeter.range_mode }} · {{ card.source_measure_state.multimeter.range_label }}</span>
+    {% endif %}
+  </div>
+
+  <div class="power-supply-footer">
+    <span>Polling <strong data-role="polling-display">{{ card.polling_rate }}</strong></span>
+  </div>
+</section>

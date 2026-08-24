@@ -1,0 +1,322 @@
+{% if error %}
+  <div class="generator-advanced-message danger">{{ error }}</div>
+{% elif advanced %}
+  {% if notice %}
+    <div class="generator-advanced-message good">{{ notice }}</div>
+  {% endif %}
+
+  <div class="generator-advanced-summary">
+    <span>
+      <small>Burst</small>
+      <strong>{{ advanced.burst.trigger_source | upper }}</strong>
+      <em>{{ advanced.burst.cycles if advanced.burst.cycles is not none else "—" }} cycles</em>
+    </span>
+    <span>
+      <small>Keying</small>
+      <strong>
+        ASK {{ advanced.modulation.ask_source | upper }}
+        · FSK {{ advanced.modulation.fsk_source | upper }}
+        · PSK {{ advanced.modulation.psk_source | upper }}
+      </strong>
+      <em>
+        FSK alt
+        {{ "%.6g" | format(advanced.modulation.fsk_secondary_frequency_hz)
+           if advanced.modulation.fsk_secondary_frequency_hz is not none else "—" }}
+        Hz
+      </em>
+    </span>
+    <span>
+      <small>External counter</small>
+      <strong>
+        {% if advanced.counter.paused %}
+          PAUSED
+        {% elif advanced.counter.mode == "both" %}
+          FREQUENCY + COUNT
+        {% elif advanced.counter.mode == "count" %}
+          COUNT
+          {{ advanced.counter.count if advanced.counter.count is not none else "—" }}
+        {% else %}
+          FREQUENCY
+          {{ "%.6g" | format(advanced.counter.frequency_hz)
+             if advanced.counter.frequency_hz is not none else "—" }} Hz
+        {% endif %}
+      </strong>
+      <em>
+        {{ advanced.counter.gate_time_s if advanced.counter.gate_time_s is not none else "—" }} s
+        · {{ advanced.counter.coupling | upper if advanced.counter.coupling else "coupling unknown" }}
+      </em>
+    </span>
+  </div>
+
+  {% if advanced.unavailable_reads %}
+    <small class="generator-readback-warning">
+      This FY6200 firmware has no read-back for:
+      {{ advanced.unavailable_reads | join(", ") }}. Commands remain available but cannot be verified.
+    </small>
+  {% endif %}
+
+  <div class="generator-advanced-grid">
+    <details>
+      <summary>Burst / trigger</summary>
+      <p class="generator-explainer">
+        Sends a fixed number of CH1 cycles after a CH2, external, or manual trigger.
+        “Trigger once” is the manual one-shot action.
+      </p>
+      <form
+        class="generator-advanced-form"
+        hx-post="/ui/devices/{{ device_id }}/generator/burst"
+        hx-target="#generator-advanced-{{ device_id }}"
+        hx-swap="innerHTML"
+        hx-disabled-elt="find button"
+      >
+        <label>
+          Source
+          <select name="source">
+            {% for value, label in [("off", "Off"), ("ch2", "CH2"), ("external", "External")] %}
+              <option value="{{ value }}"
+                {% if advanced.burst.trigger_source == value %}selected{% endif %}
+              >{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Cycles
+          <input type="number" name="cycles" min="1" max="1048575" step="1"
+                 value="{{ advanced.burst.cycles or 1 }}" required>
+        </label>
+        <button type="submit">Apply & verify</button>
+      </form>
+      <form
+        class="generator-trigger-form"
+        hx-post="/ui/devices/{{ device_id }}/generator/burst/trigger"
+        hx-target="#generator-advanced-{{ device_id }}"
+        hx-swap="innerHTML"
+        hx-confirm="Trigger CH1 once with the selected cycle count?"
+        hx-disabled-elt="find button"
+      >
+        <input type="hidden" name="cycles" value="{{ advanced.burst.cycles or 1 }}">
+        <button type="submit">Trigger once</button>
+        <small>This is an active output action on CH1.</small>
+      </form>
+      <form
+        class="generator-advanced-form"
+        hx-post="/ui/devices/{{ device_id }}/generator/pulse-width"
+        hx-target="#generator-advanced-{{ device_id }}"
+        hx-swap="innerHTML"
+        hx-disabled-elt="find button"
+      >
+        <label>
+          CH1 pulse width, ns
+          <input type="number" name="pulse_width_ns"
+                 min="100" max="1000000000" step="10"
+                 value="{{ advanced.main_pulse_width_ns
+                          if advanced.main_pulse_width_ns is not none else 100 }}"
+                 required>
+        </label>
+        <button type="submit">Apply & verify</button>
+      </form>
+    </details>
+
+    <details>
+      <summary>Modulation: ASK / FSK / PSK</summary>
+      <p class="generator-explainer">
+        CH1 is the carrier. ASK changes amplitude, FSK switches frequency, and PSK
+        switches phase from an external or manual trigger. These are the modulation
+        commands documented by the serial protocol.
+      </p>
+      <form
+        class="generator-advanced-form"
+        hx-post="/ui/devices/{{ device_id }}/generator/keying"
+        hx-target="#generator-advanced-{{ device_id }}"
+        hx-swap="innerHTML"
+        hx-disabled-elt="find button"
+      >
+        <label>
+          Type
+          <select name="kind">
+            <option value="ask">ASK</option>
+            <option value="fsk" selected>FSK</option>
+            <option value="psk">PSK</option>
+          </select>
+        </label>
+        <label>
+          Source
+          <select name="source">
+            <option value="off">Off</option>
+            <option value="external">External</option>
+            <option value="manual">Manual</option>
+          </select>
+        </label>
+        <label class="generator-field-wide">
+          FSK secondary frequency, Hz
+          <input type="number" name="secondary_frequency_hz"
+                 min="0.000001" max="10000000" step="0.000001"
+                 value="{{ '%.6f' | format(advanced.modulation.fsk_secondary_frequency_hz)
+                          if advanced.modulation.fsk_secondary_frequency_hz is not none else '1000.000000' }}">
+        </label>
+        <button type="submit">Apply</button>
+        <small class="generator-field-wide">
+          This FY6200 did not answer ASK/FSK/PSK read-back commands during live testing,
+          so OpenBench can send the documented commands but cannot confirm their state.
+          AM/FM/PM depth and source controls are not exposed by the published protocol
+          and are therefore not presented as working controls.
+        </small>
+      </form>
+    </details>
+
+    <details>
+      <summary>Sweep / VCO (CH1)</summary>
+      <p class="generator-explainer">
+        Timed sweep moves the selected CH1 parameter from Start to End during the
+        selected duration. Start above End gives a reverse sweep. VCO instead maps
+        an external 0–5 V signal on COUNTER IN to that range; its specified input
+        rate is up to 1 kHz.
+      </p>
+      {% set sweep = advanced.sweep %}
+      <form
+        class="generator-advanced-form"
+        hx-post="/ui/devices/{{ device_id }}/generator/sweep"
+        hx-target="#generator-advanced-{{ device_id }}"
+        hx-swap="innerHTML"
+        hx-disabled-elt="find button"
+      >
+        <label>
+          Target
+          <select name="target">
+            {% for value in ["frequency", "amplitude", "offset", "duty"] %}
+              <option value="{{ value }}" {% if sweep and sweep.target == value %}selected{% endif %}>
+                {{ value | capitalize }}
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Mode
+          <select name="mode">
+            <option value="linear" {% if not sweep or sweep.mode == "linear" %}selected{% endif %}>Linear</option>
+            <option value="logarithmic" {% if sweep and sweep.mode == "logarithmic" %}selected{% endif %}>Logarithmic</option>
+          </select>
+        </label>
+        <label>
+          Start
+          <input type="number" name="start" step="0.000001"
+                 value="{{ sweep.start if sweep else 100 }}" required>
+        </label>
+        <label>
+          End
+          <input type="number" name="end" step="0.000001"
+                 value="{{ sweep.end if sweep else 10000 }}" required>
+        </label>
+        <label>
+          Duration, s
+          <input type="number" name="duration_s" min="0.01" max="999.99" step="0.01"
+                 value="{{ sweep.duration_s if sweep else 1 }}" required>
+        </label>
+        <label>
+          Control
+          <select name="source">
+            <option value="time" {% if not sweep or sweep.source == "time" %}selected{% endif %}>Timed sweep</option>
+            <option value="vco" {% if sweep and sweep.source == "vco" %}selected{% endif %}>VCO · COUNTER IN 0–5 V</option>
+          </select>
+        </label>
+        <label>
+          Sweep output
+          <select name="enabled">
+            <option value="false" {% if not sweep or not sweep.enabled %}selected{% endif %}>OFF</option>
+            <option value="true" {% if sweep and sweep.enabled %}selected{% endif %}>ON</option>
+          </select>
+        </label>
+        <button type="submit">Apply</button>
+        <small class="generator-field-wide">
+          FY6200 exposes sweep/VCO writes but no read-back, so OpenBench reports this
+          block as unverified. Round-trip sweep is not exposed by the published serial
+          protocol and remains a front-panel function.
+        </small>
+      </form>
+    </details>
+
+    <details>
+      <summary>External counter</summary>
+      <p class="generator-explainer">
+        This measures a signal connected to the separate COUNTER IN connector; it
+        does not internally measure CH1 or CH2. The manual specifies input above
+        about 1.5 Vpp and no more than 20 Vpp. Frequency, count, period, both pulse
+        widths, and duty cycle are saved to captures. Frequency and Count are separate
+        instrument display modes, so OpenBench reads only the selected mode to avoid
+        making the physical screen alternate continuously.
+      </p>
+      <div class="generator-counter-values">
+        <span><small>Count</small><strong>{{ advanced.counter.count if advanced.counter.count is not none else "—" }}</strong></span>
+        <span><small>Period</small><strong>{{ "%.6g" | format(advanced.counter.period_ns) if advanced.counter.period_ns is not none else "—" }} ns</strong></span>
+        <span><small>+ width</small><strong>{{ "%.6g" | format(advanced.counter.positive_width_ns) if advanced.counter.positive_width_ns is not none else "—" }} ns</strong></span>
+        <span><small>− width</small><strong>{{ "%.6g" | format(advanced.counter.negative_width_ns) if advanced.counter.negative_width_ns is not none else "—" }} ns</strong></span>
+        <span><small>Duty</small><strong>{{ "%.6g" | format(advanced.counter.duty_percent) if advanced.counter.duty_percent is not none else "—" }} %</strong></span>
+      </div>
+      <form
+        class="generator-advanced-form"
+        hx-post="/ui/devices/{{ device_id }}/generator/counter"
+        hx-target="#generator-advanced-{{ device_id }}"
+        hx-swap="innerHTML"
+        hx-disabled-elt="find button"
+      >
+        <label>
+          Mode
+          <select name="mode">
+            <option value="frequency"
+              {% if advanced.counter.mode != "count" %}selected{% endif %}
+            >Frequency / timing</option>
+            <option value="count"
+              {% if advanced.counter.mode == "count" %}selected{% endif %}
+            >Pulse count</option>
+            <option value="both"
+              {% if advanced.counter.mode == "both" %}selected{% endif %}
+            >Frequency + count (screen alternates)</option>
+          </select>
+        </label>
+        <label>
+          Gate
+          <select name="gate_time_s">
+            {% for value in [1, 10, 100] %}
+              <option value="{{ value }}"
+                {% if advanced.counter.gate_time_s == value %}selected{% endif %}
+              >{{ value }} s</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Coupling
+          <select name="coupling">
+            <option value="dc" {% if advanced.counter.coupling != "ac" %}selected{% endif %}>DC</option>
+            <option value="ac" {% if advanced.counter.coupling == "ac" %}selected{% endif %}>AC</option>
+          </select>
+        </label>
+        <button type="submit">Start selected mode</button>
+      </form>
+      <div class="generator-counter-actions">
+        <button
+          type="button"
+          class="secondary"
+          hx-post="/ui/devices/{{ device_id }}/generator/counter/pause"
+          hx-target="#generator-advanced-{{ device_id }}"
+          hx-swap="innerHTML"
+        >Pause</button>
+        <button
+          type="button"
+          hx-get="/ui/devices/{{ device_id }}/generator/advanced"
+          hx-target="#generator-advanced-{{ device_id }}"
+          hx-swap="innerHTML"
+        >Refresh</button>
+        <button
+          type="button"
+          class="secondary"
+          hx-post="/ui/devices/{{ device_id }}/generator/counter/reset"
+          hx-target="#generator-advanced-{{ device_id }}"
+          hx-swap="innerHTML"
+          hx-confirm="Reset the external counter?"
+        >Reset counter</button>
+      </div>
+    </details>
+  </div>
+{% else %}
+  <small>Advanced generator state is unavailable.</small>
+{% endif %}

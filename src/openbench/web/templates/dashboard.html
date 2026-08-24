@@ -1,0 +1,433 @@
+{% extends "base.html" %}
+{% block title %}OpenBench{% endblock %}
+{% block content %}
+  <div id="dashboard-content">
+    {% include "partials/dashboard_content.html" %}
+  </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const dashboard = document.querySelector("#dashboard-content");
+  const protocol = location.protocol === "https:" ? "wss" : "ws";
+  const socket = new WebSocket(`${protocol}://${location.host}/ws/measurements`);
+  let timerHandle = null;
+  let timerRefreshStarted = false;
+  let discoveryTimer = null;
+  let healthTimer = null;
+
+  const formatValue = (value) => {
+    if (value === null || value === undefined) return "—";
+    const number = Number(value);
+    const absolute = Math.abs(number);
+    if (absolute !== 0 && (absolute >= 100000 || absolute < 0.0001)) {
+      return number.toExponential(5);
+    }
+    return number.toFixed(6).replace(/\.?0+$/, "");
+  };
+
+  const formatScopeMeasurement = (value, unit) => {
+    if (value === null || value === undefined || value === "") {
+      return {value: "—", unit: unit || ""};
+    }
+    const number = Number(value);
+    if (!Number.isFinite(number)) return {value: "—", unit: unit || ""};
+    const absolute = Math.abs(number);
+    let scaled = number;
+    let displayUnit = unit || "";
+    if (displayUnit === "V" && absolute !== 0 && absolute < 1) {
+      scaled *= 1000;
+      displayUnit = "mV";
+    } else if (displayUnit === "Hz" && absolute >= 1000000) {
+      scaled /= 1000000;
+      displayUnit = "MHz";
+    } else if (displayUnit === "Hz" && absolute >= 1000) {
+      scaled /= 1000;
+      displayUnit = "kHz";
+    } else if (displayUnit === "s" && absolute !== 0 && absolute < 0.000001) {
+      scaled *= 1000000000;
+      displayUnit = "ns";
+    } else if (displayUnit === "s" && absolute < 0.001) {
+      scaled *= 1000000;
+      displayUnit = "µs";
+    } else if (displayUnit === "s" && absolute < 1) {
+      scaled *= 1000;
+      displayUnit = "ms";
+    } else if (displayUnit === "deg") {
+      displayUnit = "°";
+    }
+    if (Math.abs(scaled) < 0.0005) scaled = 0;
+    return {value: scaled.toFixed(3), unit: displayUnit};
+  };
+
+  const renderScopeMeasurement = (channel, rawValue, rawUnit) => {
+    const formatted = formatScopeMeasurement(rawValue, rawUnit);
+    const value = channel.querySelector("[data-role='value']");
+    const unit = channel.querySelector("[data-role='unit']");
+    if (value) value.textContent = formatted.value;
+    if (unit) unit.textContent = formatted.unit;
+  };
+
+  const refreshScopeMeasurements = () => {
+    document.querySelectorAll("[data-scope-measurement]").forEach((channel) => {
+      renderScopeMeasurement(channel, channel.dataset.scopeValue, channel.dataset.scopeUnit);
+    });
+  };
+
+  const formatDuration = (seconds) => {
+    const value = Math.max(0, Math.round(seconds));
+    const hours = Math.floor(value / 3600);
+    const minutes = Math.floor((value % 3600) / 60);
+    const remainder = value % 60;
+    return [hours, minutes, remainder]
+      .map((part) => String(part).padStart(2, "0"))
+      .join(":");
+  };
+
+  const updateLiveStatus = (connected) => {
+    const live = document.querySelector("[data-role='live-status']");
+    if (!live) return;
+    live.textContent = connected ? "LIVE" : "OFFLINE";
+    live.classList.toggle("status-good", connected);
+    live.classList.toggle("status-danger", !connected);
+  };
+
+  const updateInstrumentCounts = () => {
+    const cards = Array.from(document.querySelectorAll("[data-device-card]"));
+    const connected = cards.filter((card) => card.dataset.connected === "true").length;
+    const count = document.querySelector("[data-role='instrument-count']");
+    const summary = document.querySelector("[data-role='connected-summary']");
+    if (count) count.textContent = `${connected} / ${cards.length}`;
+    if (summary) summary.textContent = `${connected} OF ${cards.length} CONNECTED`;
+  };
+
+  const setDeviceConnected = (card, connected) => {
+    if (!card) return;
+    card.dataset.connected = connected ? "true" : "false";
+    card.classList.toggle("is-disconnected", !connected);
+    const status = card.querySelector("[data-role='device-status']");
+    if (status) {
+      status.textContent = connected ? "CONNECTED" : "DISCONNECTED";
+      status.className = connected ? "badge good" : "badge danger";
+    }
+    card.querySelectorAll("[data-role='quality']").forEach((quality) => {
+      quality.hidden = !connected;
+    });
+    updateInstrumentCounts();
+  };
+
+  const updateGeneratorActiveSummary = (card) => {
+    if (!card) return;
+    const summary = card.querySelector("[data-generator-active-summary]");
+    if (!summary) return;
+    const active = Array.from(card.querySelectorAll("[data-generator-output-state]"))
+      .filter((button) => (button.dataset.i18nSource || button.textContent.trim()) === "ON")
+      .map((button) => button.closest(".generator-output")?.querySelector(
+        ".generator-output-heading > strong"
+      )?.textContent.trim())
+      .filter(Boolean);
+    summary.textContent = active.length ? `ACTIVE ${active.join(" + ")}` : "OUTPUTS OFF";
+    summary.className = active.length ? "badge good" : "badge muted";
+    summary.dataset.generatorActiveSummary = "";
+  };
+
+  const startHealthMonitor = () => {
+    if (healthTimer) window.clearInterval(healthTimer);
+    document.querySelectorAll("[data-device-card]").forEach((card) => {
+      card.dataset.monitorStartedAt = String(Date.now());
+    });
+    const check = () => {
+      const now = Date.now();
+      document.querySelectorAll("[data-device-card]").forEach((card) => {
+        const channels = Array.from(card.querySelectorAll("[data-channel-id]"));
+        if (!channels.length) return;
+        const connected = channels.some((channel) => {
+          if (channel.dataset.lastStatus === "disconnected") return false;
+          const lastSampleAt = Date.parse(channel.dataset.lastSampleAt || "");
+          const timeoutMs = Number(channel.dataset.freshnessTimeout || 0) * 1000;
+          if (Number.isFinite(lastSampleAt)) return now - lastSampleAt <= timeoutMs;
+          return now - Number(card.dataset.monitorStartedAt) <= timeoutMs;
+        });
+        setDeviceConnected(card, connected);
+      });
+    };
+    check();
+    healthTimer = window.setInterval(check, 500);
+  };
+
+  socket.addEventListener("open", () => updateLiveStatus(true));
+  socket.addEventListener("close", () => updateLiveStatus(false));
+  socket.addEventListener("error", () => updateLiveStatus(false));
+  socket.addEventListener("message", (event) => {
+    const sample = JSON.parse(event.data);
+    const selector = `[data-channel-id="${CSS.escape(sample.channel_id)}"]`;
+    const channel = document.querySelector(selector);
+    if (!channel) return;
+    const card = channel.closest("[data-device-card]");
+    const value = channel.querySelector("[data-role='value']");
+    const unit = channel.querySelector("[data-role='unit']");
+    const mode = channel.matches("[data-role='mode']")
+      ? channel
+      : channel.querySelector("[data-role='mode']");
+    const updated = channel.querySelector("[data-role='updated']");
+    const quality = channel.querySelector("[data-role='quality']");
+    const communicationOk = sample.status !== "disconnected";
+    if (communicationOk && channel.hasAttribute("data-scope-measurement")) {
+      channel.dataset.scopeValue = sample.value ?? "";
+      channel.dataset.scopeUnit = sample.unit || "";
+      renderScopeMeasurement(channel, sample.value, sample.unit);
+    } else {
+      if (communicationOk && value) value.textContent = formatValue(sample.value);
+      if (communicationOk && unit) unit.textContent = sample.unit || "";
+    }
+    if (communicationOk && mode) {
+      mode.textContent = channel.hasAttribute("data-source-measure-dmm")
+        ? (sample.quality || "device reported").replaceAll("_", " ")
+        : sample.quality || "device reported";
+      if (channel.hasAttribute("data-generator-output-state")) {
+        mode.className = sample.quality === "ON" ? "badge good" : "badge muted";
+        const desired = channel.closest("form")?.querySelector("input[name='enabled']");
+        if (desired) desired.value = sample.quality === "ON" ? "false" : "true";
+        updateGeneratorActiveSummary(channel.closest("[data-device-card]"));
+      }
+      if (channel.hasAttribute("data-power-supply-output-state")) {
+        mode.className = sample.quality === "ON"
+          ? "badge power-supply-output-button good"
+          : "badge power-supply-output-button muted";
+        const desired = channel.closest("form")?.querySelector("input[name='enabled']");
+        if (desired) desired.value = sample.quality === "ON" ? "false" : "true";
+      }
+      if (channel.hasAttribute("data-power-supply-protection")) {
+        mode.className = sample.status === "protection" ? "badge danger" : "badge good";
+      }
+    }
+    const counterKind = channel.dataset.generatorCounterKind;
+    if (communicationOk && counterKind) {
+      const state = channel.closest(".generator-counter-live")?.querySelector(".badge");
+      if (state) {
+        const hasValue = sample.value !== null && sample.value !== undefined;
+        const hasSignal = Number(sample.value) > 0;
+        if (sample.status === "paused") {
+          state.textContent = "PAUSED";
+          state.className = "badge muted";
+        } else if (counterKind === "count" && hasValue) {
+          state.textContent = "COUNT";
+          state.className = "badge good";
+        } else if (counterKind === "frequency") {
+          state.textContent = hasSignal ? "SIGNAL" : "IDLE";
+          state.className = hasSignal ? "badge good" : "badge muted";
+        }
+      }
+    }
+    if (communicationOk && updated) {
+      updated.textContent = new Date(sample.timestamp_utc).toLocaleTimeString();
+    }
+    if (communicationOk) channel.dataset.lastSampleAt = sample.timestamp_utc;
+    channel.dataset.lastStatus = sample.status;
+    if (quality) {
+      quality.textContent = sample.status.replaceAll("_", " ");
+      quality.className = sample.status === "ok"
+        ? "badge good"
+        : sample.status === "invalid"
+          ? "badge danger"
+          : "badge muted";
+    }
+    setDeviceConnected(card, communicationOk);
+  });
+
+  const armToasts = () => {
+    document.querySelectorAll(".toast:not([data-toast-armed])").forEach((toast) => {
+      toast.dataset.toastArmed = "true";
+      window.setTimeout(() => {
+        toast.classList.add("toast-leaving");
+        window.setTimeout(() => toast.remove(), 220);
+      }, 5000);
+    });
+  };
+
+  const refreshDashboard = async () => {
+    const response = await fetch("/ui/dashboard/content");
+    if (!response.ok) return;
+    dashboard.innerHTML = await response.text();
+    if (window.htmx) window.htmx.process(dashboard);
+    enhanceDashboard();
+  };
+
+  const startRecordingTimer = () => {
+    if (timerHandle) window.clearInterval(timerHandle);
+    timerRefreshStarted = false;
+    const timer = document.querySelector("[data-recording-timer]");
+    if (!timer) return;
+    const startedAt = new Date(timer.dataset.startedAt).getTime();
+    const duration = Number(timer.dataset.duration || 0);
+    const update = () => {
+      const elapsed = Math.max(0, (Date.now() - startedAt) / 1000);
+      timer.textContent = duration > 0
+        ? `${formatDuration(elapsed)} / ${formatDuration(duration)} · ${formatDuration(duration - elapsed)} left`
+        : `${formatDuration(elapsed)} · until stopped`;
+      if (duration > 0 && elapsed >= duration && !timerRefreshStarted) {
+        timerRefreshStarted = true;
+        window.setTimeout(refreshDashboard, 350);
+      }
+    };
+    update();
+    timerHandle = window.setInterval(update, 1000);
+  };
+
+  const restoreCaptureDraft = () => {
+    document.querySelectorAll("[data-capture-draft]").forEach((field) => {
+      const key = `openbench-${field.dataset.captureDraft}`;
+      if (!field.value) field.value = localStorage.getItem(key) || "";
+    });
+  };
+
+  const resizeCaptureComments = () => {
+    document.querySelectorAll("textarea[data-auto-grow]").forEach((field) => {
+      const expanded = document.activeElement === field;
+      if (!expanded) {
+        field.style.height = "40px";
+        field.style.overflowY = "hidden";
+        return;
+      }
+      field.style.height = "auto";
+      const height = Math.min(Math.max(field.scrollHeight, 40), 240);
+      field.style.height = `${height}px`;
+      field.style.overflowY = field.scrollHeight > 240 ? "auto" : "hidden";
+    });
+  };
+
+  const syncScopeMeasurementRows = () => {
+    document.querySelectorAll("[data-scope-measurement-setting]").forEach((row) => {
+      const item = row.querySelector("[data-scope-measurement-item]")?.value || "";
+      const pairMeasurement = item === "phase" || item === "delay";
+      const primary = row.querySelector("select[name='measurement_channel']");
+      const secondary = row.querySelector("select[name='measurement_secondary_channel']");
+      if (pairMeasurement && primary && secondary && primary.value === secondary.value) {
+        const alternative = Array.from(secondary.options).find(
+          (option) => option.value !== primary.value
+        );
+        if (alternative) secondary.value = alternative.value;
+      }
+      row.querySelectorAll("[data-scope-pair-control]").forEach((control) => {
+        control.hidden = !pairMeasurement;
+      });
+      row.querySelectorAll("[data-scope-delay-control]").forEach((control) => {
+        control.hidden = item !== "delay";
+      });
+    });
+  };
+
+  const enhanceDashboard = () => {
+    refreshScopeMeasurements();
+    armToasts();
+    restoreCaptureDraft();
+    resizeCaptureComments();
+    syncScopeMeasurementRows();
+    startRecordingTimer();
+    startHealthMonitor();
+  };
+
+  const stopDiscoveryProgress = () => {
+    if (discoveryTimer) window.clearInterval(discoveryTimer);
+    discoveryTimer = null;
+  };
+
+  const startDiscoveryProgress = (event) => {
+    const form = event.detail.elt?.closest("form");
+    const path = form?.getAttribute("hx-post") || "";
+    if (!path.startsWith("/ui/devices/discover/")) return;
+    stopDiscoveryProgress();
+
+    const driver = path.split("/").pop();
+    const names = {
+      all: "all supported devices",
+      simulated: "test meter",
+      ut197: "UNI-T UT197",
+      ut61d: "UNI-T UT61D",
+      ut61e: "UNI-T UT61E",
+      ut61eplus: "UNI-T UT61E+",
+      micsig: "Micsig MHO1",
+      micsig_eto: "Micsig ETO5004",
+      feeltech: "FeelElec FY generator",
+      dps150: "FNIRSI DPS-150",
+      owon_spm: "OWON SPM source + multimeter",
+      kingst: "Kingst LA2016"
+    };
+    const progress = document.querySelector("[data-discovery-progress]");
+    const label = progress?.querySelector("[data-discovery-label]");
+    const elapsed = progress?.querySelector("[data-discovery-elapsed]");
+    if (!progress || !label || !elapsed) return;
+
+    progress.hidden = false;
+    label.textContent = `Searching ${names[driver] || "devices"}…`;
+    const startedAt = Date.now();
+    const update = () => {
+      const seconds = Math.floor((Date.now() - startedAt) / 1000);
+      elapsed.textContent = `${seconds} s elapsed`;
+    };
+    update();
+    discoveryTimer = window.setInterval(update, 250);
+  };
+
+  document.addEventListener("input", (event) => {
+    const contextField = event.target.closest("[data-instrument-context-input]");
+    if (contextField) {
+      const deviceId = contextField.dataset.deviceId;
+      const card = document.querySelector(
+        `[data-device-card][data-device-id="${CSS.escape(deviceId)}"]`
+      );
+      const preview = card?.querySelector("[data-role='instrument-context-preview']");
+      if (preview) {
+        const fullText = contextField.value.trim();
+        const compactText = fullText.replace(/\s+/g, " ");
+        preview.textContent = Array.from(compactText).length > 20
+          ? `${Array.from(compactText).slice(0, 20).join("")}…`
+          : compactText;
+        preview.title = fullText;
+        preview.hidden = !fullText;
+      }
+    }
+
+    const field = event.target.closest("[data-capture-draft]");
+    if (!field) return;
+    localStorage.setItem(`openbench-${field.dataset.captureDraft}`, field.value);
+    if (field.matches("textarea[data-auto-grow]")) resizeCaptureComments();
+  });
+  document.addEventListener("change", (event) => {
+    if (event.target.matches(
+      "[data-scope-measurement-item], select[name='measurement_channel'], select[name='measurement_secondary_channel']"
+    )) {
+      syncScopeMeasurementRows();
+    }
+    const polling = event.target.closest("[data-device-polling-input]");
+    if (!polling) return;
+    const deviceId = polling.dataset.deviceId;
+    const selected = polling.options[polling.selectedIndex];
+    const card = document.querySelector(
+      `[data-device-card][data-device-id="${CSS.escape(deviceId)}"]`
+    );
+    card?.querySelectorAll("[data-role='polling-display']").forEach((display) => {
+      display.textContent = selected.textContent.trim();
+    });
+  });
+  document.addEventListener("focusin", (event) => {
+    if (event.target.matches("textarea[data-auto-grow]")) resizeCaptureComments();
+  });
+  document.addEventListener("focusout", (event) => {
+    if (event.target.matches("textarea[data-auto-grow]")) {
+      window.setTimeout(resizeCaptureComments, 0);
+    }
+  });
+
+  document.addEventListener("htmx:afterSwap", (event) => {
+    if (event.target.id === "dashboard-content") enhanceDashboard();
+  });
+  document.addEventListener("htmx:beforeRequest", startDiscoveryProgress);
+  document.addEventListener("htmx:afterRequest", stopDiscoveryProgress);
+  document.addEventListener("htmx:sendError", stopDiscoveryProgress);
+  document.addEventListener("htmx:responseError", stopDiscoveryProgress);
+
+  enhanceDashboard();
+})();
+</script>
+{% endblock %}

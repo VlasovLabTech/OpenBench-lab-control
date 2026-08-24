@@ -1,0 +1,130 @@
+{% set state = card.source_measure_state %}
+<div class="power-supply-settings source-measure-settings">
+  <div class="power-supply-settings-grid source-measure-settings-grid">
+    <form
+      class="power-supply-settings-form"
+      method="post"
+      action="/ui/devices/{{ card.device.id }}/source-measure/output"
+      hx-post="/ui/devices/{{ card.device.id }}/source-measure/output"
+      hx-target="#dashboard-content"
+      hx-swap="innerHTML"
+      hx-disabled-elt="find button"
+    >
+      <header><strong>Source output</strong><small>60 V · 10 A · 300 W</small></header>
+      <label>Voltage, V
+        <input type="number" name="voltage_v" min="0" max="60" step="0.01" required
+               value="{{ '%.2f' | format(state.source.set_voltage_v) if state else 0 }}">
+      </label>
+      <label>Current limit, A
+        <input type="number" name="current_a" min="0" max="10" step="0.001" required
+               value="{{ '%.3f' | format(state.source.set_current_a) if state else 0 }}">
+      </label>
+      <label class="power-supply-wide">Output state
+        <select name="enabled">
+          <option value="false" {% if not state or not state.source.output_enabled %}selected{% endif %}>OFF</option>
+          <option value="true" {% if state and state.source.output_enabled %}selected{% endif %}>ON</option>
+        </select>
+      </label>
+      <button class="power-supply-wide generator-apply" type="submit">Apply & verify</button>
+    </form>
+
+    <form
+      class="power-supply-settings-form"
+      method="post"
+      action="/ui/devices/{{ card.device.id }}/source-measure/protections"
+      hx-post="/ui/devices/{{ card.device.id }}/source-measure/protections"
+      hx-target="#dashboard-content"
+      hx-swap="innerHTML"
+      hx-disabled-elt="find button"
+    >
+      <header><strong>Source protections</strong><small>Hardware read-back</small></header>
+      <label>OVP, V
+        <input type="number" name="over_voltage_v" min="0" max="62" step="0.01" required
+               value="{{ '%.2f' | format(state.source.over_voltage_v) if state else 62 }}">
+      </label>
+      <label>OCP, A
+        <input type="number" name="over_current_a" min="0" max="10" step="0.001" required
+               value="{{ '%.3f' | format(state.source.over_current_a) if state else 10 }}">
+      </label>
+      <button class="power-supply-wide generator-apply" type="submit">Apply & verify</button>
+    </form>
+
+    <div class="power-supply-settings-form source-measure-dmm-settings">
+      <header><strong>Multimeter</strong><small>Live hardware read-back</small></header>
+      <form
+        class="power-supply-wide source-measure-subform"
+        method="post"
+        action="/ui/devices/{{ card.device.id }}/source-measure/multimeter"
+        hx-post="/ui/devices/{{ card.device.id }}/source-measure/multimeter"
+        hx-target="#dashboard-content"
+        hx-swap="innerHTML"
+        hx-disabled-elt="find button"
+      >
+        <label>Function
+          <select name="function">
+            {% for function in card.source_measure_dmm_functions %}
+              <option value="{{ function }}"
+                {% if state and state.multimeter.function == function %}selected{% endif %}
+              >{{ function | replace("_", " ") | title }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button class="generator-apply" type="submit">Set function</button>
+      </form>
+
+      {% if state %}
+        {% set function = state.multimeter.function %}
+        {% set ranges = card.source_measure_dmm_ranges.get(function, ()) %}
+        <form
+          class="power-supply-wide source-measure-subform source-measure-options-form"
+          method="post"
+          action="/ui/devices/{{ card.device.id }}/source-measure/multimeter"
+          hx-post="/ui/devices/{{ card.device.id }}/source-measure/multimeter"
+          hx-target="#dashboard-content"
+          hx-swap="innerHTML"
+          hx-disabled-elt="find button"
+        >
+          <input type="hidden" name="function" value="{{ function }}">
+          {% if ranges %}
+            <label>Range mode
+              <select name="range_mode">
+                {% if function in card.source_measure_dmm_auto_ranges %}
+                  <option value="auto"
+                    {% if state.multimeter.range_mode == "AUTO" %}selected{% endif %}
+                  >Auto</option>
+                {% endif %}
+                <option value="manual"
+                  {% if state.multimeter.range_mode != "AUTO" %}selected{% endif %}
+                >Manual</option>
+              </select>
+            </label>
+            <label>Manual range
+              <select name="range_value">
+                {% for range in ranges %}
+                  <option value="{{ range }}"
+                    {% if state.multimeter.range_value == range %}selected{% endif %}
+                  >{{ "%g" | format(range) }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          {% endif %}
+          {% if function in card.source_measure_dmm_relative %}
+            <label>Relative
+              <select name="relative_enabled">
+                <option value="false" {% if not state.multimeter.relative_enabled %}selected{% endif %}>OFF</option>
+                <option value="true" {% if state.multimeter.relative_enabled %}selected{% endif %}>ON</option>
+              </select>
+            </label>
+          {% endif %}
+          <label>Hold
+            <select name="hold_enabled">
+              <option value="false" {% if not state.multimeter.hold_enabled %}selected{% endif %}>OFF</option>
+              <option value="true" {% if state.multimeter.hold_enabled %}selected{% endif %}>ON</option>
+            </select>
+          </label>
+          <button class="generator-apply" type="submit">Apply DMM settings</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
