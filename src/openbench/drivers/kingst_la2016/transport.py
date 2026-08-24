@@ -6,10 +6,20 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import zipfile
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
+
+if sys.platform == "win32":
+    from signal import CTRL_BREAK_EVENT as _CTRL_BREAK_EVENT
+    from subprocess import CREATE_NEW_PROCESS_GROUP as _CREATE_NEW_PROCESS_GROUP
+    from subprocess import CREATE_NO_WINDOW as _CREATE_NO_WINDOW
+else:
+    _CREATE_NO_WINDOW = 0
+    _CREATE_NEW_PROCESS_GROUP = 0
+    _CTRL_BREAK_EVENT = signal.SIGTERM
 
 KINGST_SAMPLE_RATES_HZ = (
     20_000,
@@ -202,7 +212,7 @@ class SigrokCLITransport:
                 errors="replace",
                 timeout=timeout_s,
                 check=False,
-                creationflags=(subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0),
+                creationflags=_CREATE_NO_WINDOW,
             )
 
         last_timeout: subprocess.TimeoutExpired | None = None
@@ -319,7 +329,6 @@ class SigrokCLITransport:
         await asyncio.to_thread(output_file.parent.mkdir, parents=True, exist_ok=True)
         if await asyncio.to_thread(output_file.exists):
             raise FileExistsError(output_file)
-        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
         async with self._lock:
             if self._process is not None:
                 raise RuntimeError("A logic capture is already active on this analyzer")
@@ -327,7 +336,7 @@ class SigrokCLITransport:
                 *self.command(config, output_file),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                creationflags=creationflags,
+                creationflags=_CREATE_NEW_PROCESS_GROUP,
             )
             self._process = process
         try:
@@ -390,7 +399,7 @@ class SigrokCLITransport:
             return
         if os.name == "nt":
             try:
-                os.kill(process.pid, signal.CTRL_BREAK_EVENT)
+                os.kill(process.pid, _CTRL_BREAK_EVENT)
             except (OSError, ValueError):
                 process.terminate()
         else:

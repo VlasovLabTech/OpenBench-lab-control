@@ -128,6 +128,14 @@ if ($Full) {
     Invoke-Checked -FailureMessage "mypy failed." -Command {
         & (Join-Path $projectRoot ".venv\Scripts\mypy.exe") (Join-Path $projectRoot "src")
     }
+    Invoke-Checked -FailureMessage "mypy Linux-platform check failed." -Command {
+        & (Join-Path $projectRoot ".venv\Scripts\mypy.exe") --platform linux `
+            (Join-Path $projectRoot "src")
+    }
+    Invoke-Checked -FailureMessage "mypy Windows-platform check failed." -Command {
+        & (Join-Path $projectRoot ".venv\Scripts\mypy.exe") --platform win32 `
+            (Join-Path $projectRoot "src")
+    }
     Invoke-Checked -FailureMessage "pytest failed." -Command {
         & $pytestPath -q
     }
