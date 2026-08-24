@@ -7,6 +7,13 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-24
+
+### Fixed
+
+- Stabilized scheduler recovery and cross-platform CI test execution.
+- Preserved pytest diagnostics when a CI test report is incomplete.
+
 ## [0.1.0] - 2026-08-24
 
 ### Added
@@ -21,5 +28,6 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Reproducible Windows setup, CI, dependency updates, package smoke testing, and
   publication auditing.
 
-[Unreleased]: https://github.com/VlasovLabTech/OpenBench-lab-control/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/VlasovLabTech/OpenBench-lab-control/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/VlasovLabTech/OpenBench-lab-control/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/VlasovLabTech/OpenBench-lab-control/releases/tag/v0.1.0

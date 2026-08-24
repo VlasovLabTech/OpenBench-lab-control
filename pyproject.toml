@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vlasovlab-openbench"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local, safety-oriented control and data acquisition for electronics lab instruments"
 readme = "README.md"
 license = "MIT"
