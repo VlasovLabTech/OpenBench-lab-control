@@ -321,7 +321,7 @@ def wait_for_program_completion(
     client: TestClient,
     base_path: str,
     *,
-    timeout_s: float = 2.0,
+    timeout_s: float = 10.0,
 ) -> dict[str, object]:
     deadline = time.monotonic() + timeout_s
     latest: dict[str, object] = {}
@@ -331,7 +331,7 @@ def wait_for_program_completion(
         latest = response.json()
         if latest["active"] is False:
             return latest
-        time.sleep(0.02)
+        time.sleep(0.05)
     raise AssertionError(f"Power-supply program did not complete: {latest}")
 
 

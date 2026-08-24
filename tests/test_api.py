@@ -68,6 +68,12 @@ class FakeDashboardScope:
         measurements: tuple[MicsigScalarMeasurementSpec, ...],
     ) -> tuple[MicsigScalarMeasurement, ...]:
         self.replaced_profiles.append(measurements)
+        return await self.read_scalar_measurement_profile(measurements)
+
+    async def read_scalar_measurement_profile(
+        self,
+        measurements: tuple[MicsigScalarMeasurementSpec, ...],
+    ) -> tuple[MicsigScalarMeasurement, ...]:
         return tuple(
             MicsigScalarMeasurement(
                 item=spec.item,
@@ -81,12 +87,6 @@ class FakeDashboardScope:
             )
             for index, spec in enumerate(measurements, start=1)
         )
-
-    async def read_scalar_measurement_profile(
-        self,
-        measurements: tuple[MicsigScalarMeasurementSpec, ...],
-    ) -> tuple[MicsigScalarMeasurement, ...]:
-        return await self.replace_scalar_measurements(measurements)
 
     async def capture_frame(
         self,
