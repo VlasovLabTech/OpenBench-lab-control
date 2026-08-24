@@ -345,7 +345,7 @@ async def test_device_polling_can_be_suspended_and_resumed(
             assert scheduler.resume_device(meter.device_id) == 1
             await asyncio.sleep(0.03)
             assert meter.calls == calls_at_suspend
-            await asyncio.sleep(0.08)
+            await asyncio.wait_for(queue.get(), timeout=0.3)
             assert meter.calls > calls_at_suspend
             assert scheduler.device_suspended(meter.device_id) is False
     finally:

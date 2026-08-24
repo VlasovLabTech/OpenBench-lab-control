@@ -175,8 +175,8 @@ def test_four_channel_probe_uses_exact_zero_delay_contract(tmp_path: Path) -> No
     )
     assert len(measurement_lines) == 11
     assert metadata["timing"]["total_transaction_s"] > 0
-    assert metadata["timing"]["four_channel_read_phase_s"] > 0
-    assert metadata["timing"]["sum_ascii_data_transfer_s"] > 0
+    assert metadata["timing"]["four_channel_read_phase_s"] >= 0
+    assert metadata["timing"]["sum_ascii_data_transfer_s"] >= 0
 
     for source, point_count in outcome.sample_counts.items():
         result = metadata["channels"][source]

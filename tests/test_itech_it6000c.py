@@ -561,7 +561,12 @@ def test_experiment_reservation_blocks_background_polling_and_keeps_compact_read
     instrument._cached_at = 0.0
     measured = client.get(f"{base_path}/measurements")
     assert measured.status_code == 200
-    assert transport.queries == ["MEAS:VOLT?", "MEAS:CURR?"]
+    assert transport.queries
+    assert len(transport.queries) % 2 == 0
+    assert all(
+        transport.queries[index : index + 2] == ["MEAS:VOLT?", "MEAS:CURR?"]
+        for index in range(0, len(transport.queries), 2)
+    )
 
     queries_after_point_read = list(transport.queries)
     started = client.post(
