@@ -108,6 +108,16 @@ def test_clean_machine_entrypoints_and_context_are_tracked() -> None:
     assert not (PROJECT_ROOT / "VlasovLab_OpenBench_Codex_Startup_Prompt.md").exists()
 
 
+def test_package_smoke_script_supports_windows_powershell_5_1() -> None:
+    script = (PROJECT_ROOT / "scripts/test-package-install.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "-Environment @{" not in script
+    assert "$env:OPENBENCH_PORT" in script
+    assert "$env:OPENBENCH_AUTO_DISCOVER" in script
+
+
 def test_default_runtime_state_is_consolidated_under_ignored_openbench_directory() -> None:
     from openbench.config import DEFAULT_CAPTURE_DIRECTORY, DEFAULT_DATABASE_URL
 

@@ -80,18 +80,38 @@ try {
         throw "Installed package or bilingual web assets could not be imported."
     }
 
-    $serverProcess = Start-Process `
-        -FilePath $cleanPython `
-        -ArgumentList @("-m", "openbench.cli", "serve") `
-        -WorkingDirectory $smokeRoot `
-        -WindowStyle Hidden `
-        -Environment @{
-            OPENBENCH_PORT = [string]$Port
-            OPENBENCH_AUTO_DISCOVER = "false"
-        } `
-        -RedirectStandardOutput (Join-Path $smokeRoot "server.log") `
-        -RedirectStandardError (Join-Path $smokeRoot "server-error.log") `
-        -PassThru
+    $previousPort = $env:OPENBENCH_PORT
+    $previousAutoDiscover = $env:OPENBENCH_AUTO_DISCOVER
+    try {
+        # Windows PowerShell 5.1 cannot pass child-only environment values through
+        # Start-Process.
+        # Set the variables only while creating the child so the launcher remains
+        # compatible with both Windows PowerShell and PowerShell 7.
+        $env:OPENBENCH_PORT = [string]$Port
+        $env:OPENBENCH_AUTO_DISCOVER = "false"
+        $serverProcess = Start-Process `
+            -FilePath $cleanPython `
+            -ArgumentList @("-m", "openbench.cli", "serve") `
+            -WorkingDirectory $smokeRoot `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput (Join-Path $smokeRoot "server.log") `
+            -RedirectStandardError (Join-Path $smokeRoot "server-error.log") `
+            -PassThru
+    }
+    finally {
+        if ($null -eq $previousPort) {
+            Remove-Item Env:OPENBENCH_PORT -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:OPENBENCH_PORT = $previousPort
+        }
+        if ($null -eq $previousAutoDiscover) {
+            Remove-Item Env:OPENBENCH_AUTO_DISCOVER -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:OPENBENCH_AUTO_DISCOVER = $previousAutoDiscover
+        }
+    }
 
     $healthy = $false
     for ($attempt = 0; $attempt -lt 80; $attempt++) {

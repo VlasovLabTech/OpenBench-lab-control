@@ -7,6 +7,18 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.1.2-rc.1] - 2026-09-09
+
+### Added
+
+- Added the Russian OpenBench website-article source with current scope,
+  supported instruments, safety boundaries, and prior experiment examples.
+
+### Fixed
+
+- Made the clean-package server smoke test compatible with Windows PowerShell 5.1
+  while preserving isolated child-process environment settings.
+
 ## [0.1.1] - 2026-08-24
 
 ### Fixed
@@ -28,6 +40,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Reproducible Windows setup, CI, dependency updates, package smoke testing, and
   publication auditing.
 
-[Unreleased]: https://github.com/VlasovLabTech/OpenBench-lab-control/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/VlasovLabTech/OpenBench-lab-control/compare/v0.1.2-rc.1...HEAD
+[0.1.2-rc.1]: https://github.com/VlasovLabTech/OpenBench-lab-control/compare/v0.1.1...v0.1.2-rc.1
 [0.1.1]: https://github.com/VlasovLabTech/OpenBench-lab-control/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/VlasovLabTech/OpenBench-lab-control/releases/tag/v0.1.0

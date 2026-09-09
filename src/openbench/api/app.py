@@ -84,7 +84,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="VlasovLab OpenBench",
-        version="0.1.1",
+        version="0.1.2rc1",
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,

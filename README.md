@@ -243,10 +243,10 @@ constraints change.
 
 ## Project status
 
-OpenBench is an engineering project at version `0.1.1`. Its tested Windows workflows
-are intended for controlled laboratory use; it is not a certified safety system or a
-general-purpose remote instrument gateway. Compatibility claims are limited to the
-models, firmware, and dated hardware records in this repository.
+OpenBench is an engineering project at prerelease version `0.1.2rc1`. Its tested
+Windows workflows are intended for controlled laboratory use; it is not a certified
+safety system or a general-purpose remote instrument gateway. Compatibility claims
+are limited to the models, firmware, and dated hardware records in this repository.
 
 ## License
 
