@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+import threading
 import time
 import zipfile
 from pathlib import Path
@@ -28,6 +29,7 @@ class FakeLogicAnalyzer:
         self.fail_error: str | None = None
         self.capture_delay_s = 0.04
         self.download_delay_s = 0.0
+        self.download_gate: threading.Event | None = None
 
     async def identify(self) -> str:
         return "Kingst LA2016 test double"
@@ -63,6 +65,8 @@ class FakeLogicAnalyzer:
         if self.stop_requested.is_set():
             raise RuntimeError("stopped")
         await callback("downloading")  # type: ignore[operator]
+        if self.download_gate is not None:
+            await asyncio.to_thread(self.download_gate.wait, 5)
         await asyncio.sleep(self.download_delay_s)
         await asyncio.to_thread(
             output_file.write_bytes,
@@ -303,27 +307,31 @@ def test_logic_analyzer_api_dashboard_artifact_and_common_csv(
     assert recording.status_code == 201
     analyzer.capture_delay_s = 0.2
     analyzer.download_delay_s = 0.3
-    started = client.post(
-        f"{base}/captures/start",
-        json={"title": "Digital edge", "comment": "Immediate capture"},
-    )
-    assert started.status_code == 201
-    assert started.json()["estimated_duration_s"] > 0.05
-    assert started.json()["remaining_s"] is not None
-    capture_id = started.json()["capture_id"]
-    downloading = wait_for_logic_state(
-        client,
-        analyzer.device_id,
-        {"downloading"},
-    )
-    assert downloading["remaining_s"] is not None
-    active_panel = client.get(
-        f"/ui/devices/{analyzer.device_id}/logic-analyzer/status"
-    )
-    assert active_panel.status_code == 200
-    assert 'class="logic-progress-time"' in active_panel.text
-    assert "<progress" in active_panel.text
-    assert "logic-progress-indeterminate" not in active_panel.text
+    analyzer.download_gate = threading.Event()
+    try:
+        started = client.post(
+            f"{base}/captures/start",
+            json={"title": "Digital edge", "comment": "Immediate capture"},
+        )
+        assert started.status_code == 201
+        assert started.json()["estimated_duration_s"] > 0.05
+        assert started.json()["remaining_s"] is not None
+        capture_id = started.json()["capture_id"]
+        downloading = wait_for_logic_state(
+            client,
+            analyzer.device_id,
+            {"downloading"},
+        )
+        assert downloading["remaining_s"] is not None
+        active_panel = client.get(
+            f"/ui/devices/{analyzer.device_id}/logic-analyzer/status"
+        )
+        assert active_panel.status_code == 200
+        assert 'class="logic-progress-time"' in active_panel.text
+        assert "<progress" in active_panel.text
+        assert "logic-progress-indeterminate" not in active_panel.text
+    finally:
+        analyzer.download_gate.set()
     completed = wait_for_logic_state(client, analyzer.device_id, {"completed"})
     assert completed["artifact_file"] == "capture.sr"
     assert completed["recording_file"] == recording.json()["current_file"]
